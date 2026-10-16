@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+
+      - name: Restore
+        run: dotnet restore slickgate.slnx
+
+      - name: Build
+        run: dotnet build slickgate.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test slickgate.slnx -c Release --no-build --verbosity normal
+
+  native-aot:
+    name: Native AOT publish (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The -aot SDK image ships clang/objcopy, so no extra apt packages needed.
+      - name: Publish native AOT
+        run: |
+          docker build --target aot -t slickgate:aot .
+
+      - name: Smoke test the AOT binary
+        run: |
+          docker run -d --name sg -p 8080:80 -e SLICKGATE_CONFIG=/etc/slickgate/gateway.yaml slickgate:aot
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8080/-/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/-/health
+          docker rm -f sg

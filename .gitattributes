@@ -1,0 +1,16 @@
+* text=auto
+
+*.cs        text eol=lf
+*.csproj    text eol=lf
+*.slnx      text eol=lf
+*.props     text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+Dockerfile  text eol=lf
+*.sh        text eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.pfx binary

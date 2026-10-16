@@ -1,0 +1,56 @@
+# Slickgate gateway configuration.
+# This file is hot-reloaded on change: no restart needed.
+
+server:
+  http_port: 8080
+  https_port: 8443          # 0 disables the HTTPS listener
+  redirect_http_to_https: true
+
+admin:
+  enabled: true
+  # Protect the admin API with a token (sent as X-Slickgate-Token).
+  # token: changeme
+
+acme:
+  enabled: false            # flip to true once this gateway is reachable on :80
+  email: admin@example.com
+  # Use the staging directory while testing to avoid Let's Encrypt rate limits.
+  directory_url: https://acme-staging-v02.api.letsencrypt.org/directory
+  storage_dir: ./certs
+
+docker:
+  enabled: false
+  endpoint: unix:///var/run/docker.sock
+  # Destination containers must be on this network (Docker DNS name used as fallback).
+  network: slickgate
+  label_prefix: slickgate
+  poll_interval: 10s
+
+telemetry:
+  # otlp_endpoint: http://localhost:4317
+
+routes:
+  - id: api
+    host: api.example.com
+    path_prefix: /api
+    upstreams:
+      - http://127.0.0.1:5099
+    strip_prefix: /api
+    tls: off                 # off | internal (self-signed) | auto (Let's Encrypt)
+    request_headers:
+      set:
+        X-Gateway: slickgate
+    response_headers:
+      set:
+        X-Powered-By: slickgate
+    health_check:
+      path: /
+      interval: 10s
+      timeout: 2s
+
+  - id: catch-all
+    hosts: [localhost, 127.0.0.1]
+    path_prefix: /
+    upstreams:
+      - http://127.0.0.1:5099
+    tls: internal

@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Authors>codemahek</Authors>
+    <Product>Slickgate</Product>
+    <Description>A Caddy-style automated edge gateway for .NET: YAML config, auto-HTTPS, Docker service discovery, built on YARP.</Description>
+    <RepositoryUrl>https://github.com/codemahek/slickgate</RepositoryUrl>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+</Project>
