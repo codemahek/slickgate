@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <StaticWebAssetSpaFallbackEnabled>true</StaticWebAssetSpaFallbackEnabled>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishedTrimmed>true</PublishedTrimmed>
+    <CompressionEnabled>true</CompressionEnabled>
+    <TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
+    <WasmEnableSIMD>true</WasmEnableSIMD>
+    <Http3Support>false</Http3Support>
+    <DebuggerSupport Condition="'$(Configuration)' == 'Release'">false</DebuggerSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="11.0.0-rc.2.26504.105" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Gateway" Version="11.0.0-rc.2.26504.105" PrivateAssets="all" />
+    <PackageReference Include="MudBlazor" Version="9.11.0" />
+    <PackageReference Include="ReactiveUI" Version="26.0.1" />
+    <PackageReference Include="ReactiveUI.Blazor" Version="26.0.1" />
+    <PackageReference Include="System.Reactive" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>

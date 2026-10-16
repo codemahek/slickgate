@@ -7,6 +7,10 @@
 .idea/
 .git/
 *.md
+bench/.tools/
+bench/.build/
+bench/results/
+bench/results-docker/
 certs/
 docker-compose*.yml
 samples/*

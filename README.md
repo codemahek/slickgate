@@ -27,6 +27,9 @@ Internet ──▶ Slickgate ──┬─▶ api     (api.example.com/api/*)
 - **Health checks** — active probing per cluster with automatic failover.
 - **Admin API** — inspect effective routes/config and trigger reloads at
   `/-/…` (optionally token-protected).
+- **Admin UI** — a standalone Blazor WebAssembly dashboard (its own container)
+  for routes, mappings, Docker containers, and settings, talking to the gateway
+  purely over the admin API.
 - **Observability** — OpenTelemetry (OTLP) traces/metrics when configured.
 - **Native AOT** — `-p:SlickgateAot=true` produces a self-contained native
   binary for fast cold starts and a tiny footprint.
@@ -59,6 +62,9 @@ docker compose up --build
 Then browse `http://app.localhost:8080` (static route) and
 `http://whoami.localhost:8080` (route discovered from labels). On
 Windows/macOS `*.localhost` resolves to the loopback address automatically.
+
+The standalone admin UI is served at `http://localhost:8081` and connects to the
+gateway over its admin API.
 
 ## Configuration
 

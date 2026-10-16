@@ -33,13 +33,63 @@ public sealed record ConfigResponse(
     DockerConfig Docker,
     TelemetryConfig Telemetry);
 
+public sealed record ErrorResponse(string Error);
+
+// ---- Docker containers --------------------------------------------------
+
+public sealed record DockerPortView(int PrivatePort, int? PublicPort, string Type);
+
+public sealed record ContainerView(
+    string Id,
+    string Name,
+    string Image,
+    string State,
+    List<DockerPortView> Ports,
+    bool Enabled,
+    string? RouteId,
+    Dictionary<string, string> Labels,
+    RouteMapping Suggested);
+
+public sealed record ContainersResponse(
+    bool DockerEnabled,
+    string? Error,
+    int Count,
+    List<ContainerView> Containers);
+
+// ---- Admin-managed mappings --------------------------------------------
+
+public sealed record HealthCheckMapping(string? Path, string? Interval, string? Timeout);
+
+public sealed record RouteMapping(
+    string? Id,
+    List<string>? Hosts,
+    string? PathPrefix,
+    string? PathExact,
+    List<string>? Upstreams,
+    string? StripPrefix,
+    string? Tls,
+    Dictionary<string, string>? RequestHeadersSet,
+    Dictionary<string, string>? ResponseHeadersSet,
+    HealthCheckMapping? HealthCheck,
+    int? Order);
+
+public sealed record MappingsResponse(int Count, List<RouteMapping> Mappings);
+
+public sealed record MappingResponse(bool Success, string? Error, RouteMapping? Mapping);
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     WriteIndented = true,
     ReadCommentHandling = JsonCommentHandling.Skip,
-    AllowTrailingCommas = true)]
+    AllowTrailingCommas = true,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(RoutesResponse))]
 [JsonSerializable(typeof(ReloadResponse))]
 [JsonSerializable(typeof(ConfigResponse))]
+[JsonSerializable(typeof(ErrorResponse))]
+[JsonSerializable(typeof(ContainersResponse))]
+[JsonSerializable(typeof(MappingsResponse))]
+[JsonSerializable(typeof(MappingResponse))]
+[JsonSerializable(typeof(RouteMapping))]
 internal sealed partial class AdminJsonContext : JsonSerializerContext;

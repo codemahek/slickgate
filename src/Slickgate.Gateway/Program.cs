@@ -47,6 +47,7 @@ builder.Services.AddSingleton(runtime);
 builder.Services.AddSingleton<IProxyConfigProvider>(proxyProvider);
 builder.Services.AddSingleton(certificates);
 builder.Services.AddSingleton<AcmeChallengeStore>();
+builder.Services.AddSingleton<MappingsStore>();
 builder.Services.AddSingleton<ConfigReloader>();
 builder.Services.AddHostedService<ConfigFileWatcherService>();
 builder.Services.AddHostedService<AcmeProvisioner>();
@@ -91,7 +92,11 @@ certificates.UpdateRoutes(initialConfig.Routes);
 
 var app = builder.Build();
 
+// Apply the admin-managed mappings overlay (if any) before serving.
+app.Services.GetRequiredService<MappingsStore>().TryLoad(out _);
+
 app.UseMiddleware<AcmeChallengeMiddleware>();
+app.UseMiddleware<AdminCorsMiddleware>();
 app.MapAdminApi();
 app.UseMiddleware<HttpsRedirectMiddleware>();
 app.MapReverseProxy();
@@ -110,6 +115,7 @@ return 0;
 static GatewayHostOptions ResolveHostOptions(string[] args)
 {
     string? path = null;
+    string? mappings = null;
 
     for (var i = 0; i < args.Length; i++)
     {
@@ -121,9 +127,18 @@ static GatewayHostOptions ResolveHostOptions(string[] args)
         {
             path = args[i]["--config=".Length..];
         }
+        else if (args[i] == "--mappings" && i + 1 < args.Length)
+        {
+            mappings = args[i + 1];
+        }
+        else if (args[i].StartsWith("--mappings=", StringComparison.Ordinal))
+        {
+            mappings = args[i]["--mappings=".Length..];
+        }
     }
 
     path ??= Environment.GetEnvironmentVariable("SLICKGATE_CONFIG");
+    mappings ??= Environment.GetEnvironmentVariable("SLICKGATE_MAPPINGS");
 
     if (string.IsNullOrWhiteSpace(path))
     {
@@ -146,5 +161,9 @@ static GatewayHostOptions ResolveHostOptions(string[] args)
             "or place gateway.yaml in the working directory.");
     }
 
-    return new GatewayHostOptions { ConfigPath = path };
+    mappings ??= Path.Combine(
+        Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".",
+        "gateway.mappings.yaml");
+
+    return new GatewayHostOptions { ConfigPath = path, MappingsPath = mappings };
 }

@@ -28,22 +28,12 @@ public static class YamlConfigLoader
 
     public static GatewayConfig Load(string yaml)
     {
-        var stream = new YamlStream();
-        try
-        {
-            stream.Load(new StringReader(yaml));
-        }
-        catch (YamlException ex)
-        {
-            throw new SlickgateConfigException($"Invalid YAML: {ex.Message}");
-        }
-
-        if (stream.Documents.Count == 0)
+        var root = ParseDocument(yaml);
+        if (root is null)
         {
             return new GatewayConfig();
         }
 
-        var root = stream.Documents[0].RootNode;
         if (root is not YamlMappingNode map)
         {
             throw new SlickgateConfigException("Config root must be a YAML mapping.");
@@ -59,19 +49,69 @@ public static class YamlConfigLoader
             Routes = ParseRoutes(Seq(map, "routes")),
         };
 
-        Validate(config);
-        return config;
-    }
-
-    private static void Validate(GatewayConfig config)
-    {
         if (config.Server.HttpPort == 0 && config.Server.HttpsPort == 0)
         {
             throw new SlickgateConfigException("At least one of server.http_port / server.https_port must be non-zero.");
         }
 
+        ValidateRoutes(config.Routes);
+
+        if (config.Acme.Enabled && string.IsNullOrWhiteSpace(config.Acme.Email))
+        {
+            throw new SlickgateConfigException("acme.email is required when acme.enabled is true.");
+        }
+
+        return config;
+    }
+
+    /// <summary>
+    /// Loads a routes-only overlay document (used for admin-managed mappings). The
+    /// document must be a mapping with a top-level <c>routes</c> sequence.
+    /// </summary>
+    public static IReadOnlyList<RouteDefinition> LoadRouteList(string yaml)
+    {
+        var root = ParseDocument(yaml);
+        if (root is null)
+        {
+            return [];
+        }
+
+        var routes = root switch
+        {
+            YamlMappingNode map => ParseRoutes(Seq(map, "routes")),
+            YamlSequenceNode seq => ParseRoutes(seq),
+            _ => throw new SlickgateConfigException(
+                "Mappings document must be a mapping with a 'routes' list."),
+        };
+
+        ValidateRoutes(routes);
+        return routes;
+    }
+
+    /// <summary>Wraps a list of routes as a standalone overlay document.</summary>
+    public static string WriteRouteList(IReadOnlyList<RouteDefinition> routes) =>
+        RouteYamlWriter.Write(routes);
+
+    private static YamlNode? ParseDocument(string yaml)
+    {
+        var stream = new YamlStream();
+        try
+        {
+            stream.Load(new StringReader(yaml));
+        }
+        catch (YamlException ex)
+        {
+            throw new SlickgateConfigException($"Invalid YAML: {ex.Message}");
+        }
+
+        return stream.Documents.Count == 0 ? null : stream.Documents[0].RootNode;
+    }
+
+    /// <summary>Validates a set of routes (unique ids, upstreams, matchers).</summary>
+    public static void ValidateRoutes(IReadOnlyList<RouteDefinition> routes)
+    {
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var route in config.Routes)
+        foreach (var route in routes)
         {
             if (string.IsNullOrWhiteSpace(route.Id))
             {
@@ -104,11 +144,6 @@ public static class YamlConfigLoader
                     $"Route '{route.Id}' must match on at least one of host, path_prefix, or path_exact.");
             }
         }
-
-        if (config.Acme.Enabled && string.IsNullOrWhiteSpace(config.Acme.Email))
-        {
-            throw new SlickgateConfigException("acme.email is required when acme.enabled is true.");
-        }
     }
 
     // ---- Section parsers -------------------------------------------------
@@ -128,6 +163,7 @@ public static class YamlConfigLoader
         {
             Enabled = Bool(map, "enabled", true),
             Token = String(map, "token"),
+            CorsOrigins = StringList(map, "cors_origins"),
         };
 
     private static AcmeConfig ParseAcme(YamlMappingNode? map) => map is null

@@ -28,6 +28,12 @@ public sealed record AdminConfig
 {
     public bool Enabled { get; init; } = true;
     public string? Token { get; init; }
+
+    /// <summary>
+    /// Origins allowed to call the admin API from a browser (the UI is deployed
+    /// independently, so it is normally a different origin). Use "*" to allow any.
+    /// </summary>
+    public IReadOnlyList<string> CorsOrigins { get; init; } = [];
 }
 
 public sealed record AcmeConfig

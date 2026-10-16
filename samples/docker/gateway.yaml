@@ -12,6 +12,11 @@ server:
 admin:
   enabled: true
   token: change-me
+  # The admin UI is served separately (docker-compose service `admin` on
+  # http://localhost:8081) and calls this admin API cross-origin.
+  cors_origins:
+    - http://localhost:8081
+    - https://localhost:8081
 
 acme:
   enabled: false

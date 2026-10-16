@@ -11,6 +11,9 @@ public sealed class ContainerListItem
     [JsonPropertyName("Names")]
     public string[] Names { get; set; } = [];
 
+    [JsonPropertyName("Image")]
+    public string Image { get; set; } = "";
+
     [JsonPropertyName("Labels")]
     public Dictionary<string, string>? Labels { get; set; }
 
@@ -19,6 +22,24 @@ public sealed class ContainerListItem
 
     [JsonPropertyName("Status")]
     public string Status { get; set; } = "";
+
+    [JsonPropertyName("Ports")]
+    public DockerPort[] Ports { get; set; } = [];
+}
+
+public sealed class DockerPort
+{
+    [JsonPropertyName("IP")]
+    public string? Ip { get; set; }
+
+    [JsonPropertyName("PrivatePort")]
+    public int PrivatePort { get; set; }
+
+    [JsonPropertyName("PublicPort")]
+    public int? PublicPort { get; set; }
+
+    [JsonPropertyName("Type")]
+    public string Type { get; set; } = "";
 }
 
 public sealed class ContainerInspect

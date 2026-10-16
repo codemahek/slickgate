@@ -1,0 +1,112 @@
+@page "/settings"
+@inherits ReactiveComponentBase<SettingsViewModel>
+@inject ISnackbar Snackbar
+
+<PageTitle>Slickgate · Settings</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Settings</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Gateway connection</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="_form">
+                    <MudTextField T="string" Label="Gateway base URL" @bind-Value="ViewModel!.BaseUrl" Required="true"
+                                  RequiredError="A base URL is required."
+                                  Placeholder="http://localhost:8080"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link"
+                                  HelperText="Origin of the gateway's admin API, no trailing slash." />
+                    <MudTextField T="string" Label="Admin token" @bind-Value="ViewModel!.Token"
+                                  InputType="@(_showToken ? InputType.Text : InputType.Password)"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_showToken ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="@(() => _showToken = !_showToken)"
+                                  HelperText="Value of admin.token in the gateway config. Sent as X-Slickgate-Token." />
+                </MudForm>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveAsync">Save</MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.NetworkCheck"
+                           Disabled="@ViewModel!.IsTesting" OnClick="TestAsync">Test connection</MudButton>
+                @if (ViewModel!.HasUnsavedChanges)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Class="ml-2">Unsaved changes</MudChip>
+                }
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Status</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (ViewModel!.StatusMessage is null)
+                {
+                    <MudText Class="mud-text-secondary">Not tested yet.</MudText>
+                }
+                else if (ViewModel!.StatusOk)
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@ViewModel!.StatusMessage</MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@ViewModel!.StatusMessage</MudAlert>
+                }
+
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    The UI is a standalone Blazor WebAssembly app; it talks to the gateway only over the
+                    admin HTTP API. Ensure the gateway's <code>admin.cors_origins</code> includes this app's origin.
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private MudForm _form = default!;
+    private bool _showToken;
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        var error = await ViewModel!.SaveAsync();
+        if (error is null)
+        {
+            Snackbar.Add("Connection settings saved.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(error, Severity.Error);
+        }
+    }
+
+    private async Task TestAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        await ViewModel!.TestAsync();
+    }
+
+    protected override SettingsViewModel CreateViewModel(IServiceProvider serviceProvider) =>
+        serviceProvider.GetRequiredService<SettingsViewModel>();
+}

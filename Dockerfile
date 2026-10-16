@@ -31,7 +31,7 @@ WORKDIR /src
 COPY Directory.Build.props ./
 COPY src/Slickgate.Core/Slickgate.Core.csproj src/Slickgate.Core/
 COPY src/Slickgate.Gateway/Slickgate.Gateway.csproj src/Slickgate.Gateway/
-RUN dotnet restore src/Slickgate.Gateway/Slickgate.Gateway.csproj -r linux-x64
+RUN dotnet restore src/Slickgate.Gateway/Slickgate.Gateway.csproj -r linux-x64 -p:SlickgateAot=true
 COPY src/ src/
 RUN dotnet publish src/Slickgate.Gateway/Slickgate.Gateway.csproj \
         -c Release -r linux-x64 -p:SlickgateAot=true --no-restore -o /app/publish

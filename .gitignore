@@ -14,3 +14,7 @@ certs/
 .DS_Store
 appsettings.*.local.json
 gateway.local.yaml
+bench/.tools/
+bench/.build/
+bench/results/
+bench/results-docker/

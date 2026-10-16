@@ -1,0 +1,29 @@
+# Benchmark configuration: one catch-all route straight to the local backend.
+#
+# Everything that costs work (ACME, Docker polling, telemetry) is off so the
+# numbers isolate proxy overhead. HTTP only — TLS is benchmarked separately.
+
+server:
+  http_port: 8090
+  https_port: 8490
+  redirect_http_to_https: false
+
+admin:
+  enabled: true
+
+acme:
+  enabled: false
+
+docker:
+  enabled: false
+
+telemetry:
+  otlp_endpoint: null
+
+routes:
+  - id: catch-all
+    hosts: [127.0.0.1, localhost]
+    path_prefix: /
+    upstreams:
+      - http://127.0.0.1:8088
+    tls: off

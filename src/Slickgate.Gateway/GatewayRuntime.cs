@@ -4,14 +4,16 @@ using Slickgate.Core.Proxy;
 namespace Slickgate.Gateway;
 
 /// <summary>
-/// Holds the live gateway state: file-based routes plus routes discovered from
-/// Docker labels. Every change produces a new merged snapshot that is pushed to
-/// YARP (hot reload) and announced to subscribers (certificates, ACME).
+/// Holds the live gateway state: file-based routes, admin-managed mapping routes,
+/// and routes discovered from Docker labels. Every change produces a new merged
+/// snapshot that is pushed to YARP (hot reload) and announced to subscribers
+/// (certificates, ACME).
 /// </summary>
 public sealed class GatewayRuntime(DynamicProxyConfigProvider provider)
 {
     private readonly object _gate = new();
     private GatewayConfig _fileConfig = new();
+    private IReadOnlyList<RouteDefinition> _mappingRoutes = [];
     private IReadOnlyList<RouteDefinition> _dockerRoutes = [];
     private GatewayConfig _effective = new();
 
@@ -46,6 +48,17 @@ public sealed class GatewayRuntime(DynamicProxyConfigProvider provider)
         }
     }
 
+    public IReadOnlyList<RouteDefinition> MappingRoutes
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _mappingRoutes;
+            }
+        }
+    }
+
     public IReadOnlyList<RouteDefinition> DockerRoutes
     {
         get
@@ -69,6 +82,18 @@ public sealed class GatewayRuntime(DynamicProxyConfigProvider provider)
         Changed?.Invoke(effective);
     }
 
+    public void SetMappingRoutes(IReadOnlyList<RouteDefinition> routes)
+    {
+        GatewayConfig effective;
+        lock (_gate)
+        {
+            _mappingRoutes = routes;
+            effective = Recompute();
+        }
+
+        Changed?.Invoke(effective);
+    }
+
     public void SetDockerRoutes(IReadOnlyList<RouteDefinition> routes)
     {
         GatewayConfig effective;
@@ -83,7 +108,7 @@ public sealed class GatewayRuntime(DynamicProxyConfigProvider provider)
 
     private GatewayConfig Recompute()
     {
-        var merged = Merge(_fileConfig.Routes, _dockerRoutes);
+        var merged = Merge(_fileConfig.Routes, _mappingRoutes, _dockerRoutes);
         var effective = _fileConfig with { Routes = merged };
 
         var (routes, clusters) = YarpConfigMapper.Map(effective);
@@ -95,30 +120,28 @@ public sealed class GatewayRuntime(DynamicProxyConfigProvider provider)
         return effective;
     }
 
-    /// <summary>Appends Docker routes, renaming any whose id collides with a file route.</summary>
-    private static List<RouteDefinition> Merge(
-        IReadOnlyList<RouteDefinition> fileRoutes,
-        IReadOnlyList<RouteDefinition> dockerRoutes)
+    /// <summary>
+    /// Concatenates route sources in priority order, renaming any route whose id
+    /// collides with an earlier one (first occurrence keeps the id).
+    /// </summary>
+    private static List<RouteDefinition> Merge(params IReadOnlyList<RouteDefinition>[] sources)
     {
-        var merged = new List<RouteDefinition>(fileRoutes.Count + dockerRoutes.Count);
-        merged.AddRange(fileRoutes);
+        var merged = new List<RouteDefinition>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
 
-        if (dockerRoutes.Count == 0)
+        foreach (var source in sources)
         {
-            return merged;
-        }
-
-        var ids = new HashSet<string>(fileRoutes.Select(static r => r.Id), StringComparer.Ordinal);
-        foreach (var route in dockerRoutes)
-        {
-            var id = route.Id;
-            var suffix = 2;
-            while (!ids.Add(id))
+            foreach (var route in source)
             {
-                id = $"{route.Id}-{suffix++}";
-            }
+                var id = route.Id;
+                var suffix = 2;
+                while (!ids.Add(id))
+                {
+                    id = $"{route.Id}-{suffix++}";
+                }
 
-            merged.Add(id == route.Id ? route : route with { Id = id });
+                merged.Add(id == route.Id ? route : route with { Id = id });
+            }
         }
 
         return merged;

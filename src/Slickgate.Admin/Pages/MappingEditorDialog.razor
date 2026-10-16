@@ -1,0 +1,179 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(IsNew ? "New mapping" : $"Edit '{Model?.Id}'")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" Label="Id" @bind-Value="_id" Required="true" Disabled="@(!IsNew)"
+                          RequiredError="An id is required."
+                          HelperText="Unique route id. Used as the admin-managed route key." />
+            <MudTextField T="string" Label="Hosts" @bind-Value="_hosts" Lines="2"
+                          HelperText="One per line or comma-separated. Leave empty to match any host." />
+            <div class="d-flex gap-4">
+                <MudTextField T="string" Label="Path prefix" @bind-Value="_pathPrefix" Placeholder="/" Class="flex-grow-1" />
+                <MudTextField T="string" Label="Path exact" @bind-Value="_pathExact" Placeholder="(optional)" Class="flex-grow-1" />
+            </div>
+            <MudTextField T="string" Label="Upstreams" @bind-Value="_upstreams" Lines="3" Required="true"
+                          RequiredError="At least one upstream is required."
+                          HelperText="e.g. http://app:8080 — one per line or comma-separated." />
+            <div class="d-flex gap-4">
+                <MudTextField T="string" Label="Strip prefix" @bind-Value="_stripPrefix" Placeholder="(optional)" Class="flex-grow-1" />
+                <MudSelect T="string" Label="TLS" @bind-Value="_tls" Class="flex-grow-1">
+                    <MudSelectItem T="string" Value="@("off")">off</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("internal")">internal (self-signed)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("auto")">auto (ACME)</MudSelectItem>
+                </MudSelect>
+                <MudNumericField T="int?" Label="Order" @bind-Value="_order" Class="flex-grow-1"
+                                 HelperText="Lower wins. Empty = append." />
+            </div>
+
+            <MudExpansionPanels Class="mt-2" Elevation="0">
+                <MudExpansionPanel Text="Headers">
+                    <MudTextField T="string" Label="Request headers (set)" @bind-Value="_requestHeaders" Lines="2"
+                                  HelperText="One 'Name: value' per line." />
+                    <MudTextField T="string" Label="Response headers (set)" @bind-Value="_responseHeaders" Lines="2"
+                                  HelperText="One 'Name: value' per line." />
+                </MudExpansionPanel>
+                <MudExpansionPanel Text="Health check">
+                    <div class="d-flex gap-4">
+                        <MudTextField T="string" Label="Path" @bind-Value="_healthPath" Placeholder="/health" Class="flex-grow-1" />
+                        <MudTextField T="string" Label="Interval" @bind-Value="_healthInterval" Placeholder="10s" Class="flex-grow-1" />
+                        <MudTextField T="string" Label="Timeout" @bind-Value="_healthTimeout" Placeholder="2s" Class="flex-grow-1" />
+                    </div>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public RouteMapping? Model { get; set; }
+
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    private MudForm _form = default!;
+
+    private string _id = "";
+    private string _hosts = "";
+    private string _pathPrefix = "";
+    private string _pathExact = "";
+    private string _upstreams = "";
+    private string _stripPrefix = "";
+    private string _tls = "off";
+    private int? _order;
+    private string _requestHeaders = "";
+    private string _responseHeaders = "";
+    private string _healthPath = "";
+    private string _healthInterval = "";
+    private string _healthTimeout = "";
+
+    protected override void OnInitialized()
+    {
+        if (Model is null)
+        {
+            return;
+        }
+
+        _id = Model.Id ?? "";
+        _hosts = string.Join('\n', Model.Hosts ?? []);
+        _pathPrefix = Model.PathPrefix ?? "";
+        _pathExact = Model.PathExact ?? "";
+        _upstreams = string.Join('\n', Model.Upstreams ?? []);
+        _stripPrefix = Model.StripPrefix ?? "";
+        _tls = Model.Tls ?? "off";
+        _order = Model.Order;
+        _requestHeaders = FormatHeaders(Model.RequestHeadersSet);
+        _responseHeaders = FormatHeaders(Model.ResponseHeadersSet);
+        _healthPath = Model.HealthCheck?.Path ?? "";
+        _healthInterval = Model.HealthCheck?.Interval ?? "";
+        _healthTimeout = Model.HealthCheck?.Timeout ?? "";
+    }
+
+    private async Task SubmitAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        var mapping = new RouteMapping(
+            string.IsNullOrWhiteSpace(_id) ? null : _id.Trim(),
+            ParseList(_hosts),
+            NullIfBlank(_pathPrefix),
+            NullIfBlank(_pathExact),
+            ParseList(_upstreams),
+            NullIfBlank(_stripPrefix),
+            _tls,
+            ParseHeaders(_requestHeaders),
+            ParseHeaders(_responseHeaders),
+            BuildHealthCheck(),
+            _order);
+
+        MudDialog.Close(DialogResult.Ok(mapping));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private HealthCheckMapping? BuildHealthCheck()
+    {
+        if (string.IsNullOrWhiteSpace(_healthPath)
+            && string.IsNullOrWhiteSpace(_healthInterval)
+            && string.IsNullOrWhiteSpace(_healthTimeout))
+        {
+            return null;
+        }
+
+        return new HealthCheckMapping(
+            NullIfBlank(_healthPath),
+            NullIfBlank(_healthInterval),
+            NullIfBlank(_healthTimeout));
+    }
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<string>? ParseList(string value)
+    {
+        var items = value
+            .Split([',', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        return items.Count == 0 ? null : items;
+    }
+
+    private static Dictionary<string, string>? ParseHeaders(string value)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in value.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var index = line.IndexOf(':');
+            if (index <= 0)
+            {
+                continue;
+            }
+
+            var name = line[..index].Trim();
+            var headerValue = line[(index + 1)..].Trim();
+            if (name.Length > 0)
+            {
+                headers[name] = headerValue;
+            }
+        }
+
+        return headers.Count == 0 ? null : headers;
+    }
+
+    private static string FormatHeaders(Dictionary<string, string>? headers) =>
+        headers is null ? "" : string.Join('\n', headers.Select(h => $"{h.Key}: {h.Value}"));
+}

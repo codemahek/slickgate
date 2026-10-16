@@ -1,0 +1,80 @@
+@page "/routes"
+@inherits ReactiveComponentBase<RoutesViewModel>
+
+<PageTitle>Slickgate · Routes</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Routes</MudText>
+
+@if (ViewModel!.ErrorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4" Variant="Variant.Outlined">@ViewModel!.ErrorMessage</MudAlert>
+}
+
+<MudTable Items="@ViewModel!.Filtered" Loading="@ViewModel!.IsLoading" Hover="true" Breakpoint="Breakpoint.Md" Dense="true">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Effective routes (@ViewModel!.Filtered.Count)</MudText>
+        <MudSpacer />
+        <MudTextField @bind-Value="ViewModel!.Search" @bind-Value:after="OnSearchChanged" Placeholder="Search" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
+                      Immediate="true" Class="mt-0" />
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="@(() => ViewModel!.RefreshAsync())" Class="ml-2" />
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Id</MudTh>
+        <MudTh>Source</MudTh>
+        <MudTh>Hosts</MudTh>
+        <MudTh>Path</MudTh>
+        <MudTh>Upstreams</MudTh>
+        <MudTh>TLS</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Id"><code>@context.Id</code></MudTd>
+        <MudTd DataLabel="Source">
+            <MudChip T="string" Size="Size.Small" Color="@SourceColor(context.Source)">@context.Source</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Hosts">
+            @foreach (var host in context.Hosts)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-1">@host</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Path">
+            <code>@context.PathPrefix</code>
+            @if (!string.IsNullOrEmpty(context.PathExact))
+            {
+                <MudText Typo="Typo.caption">exact: <code>@context.PathExact</code></MudText>
+            }
+            @if (!string.IsNullOrEmpty(context.StripPrefix))
+            {
+                <MudText Typo="Typo.caption">strip <code>@context.StripPrefix</code></MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Upstreams">
+            @foreach (var upstream in context.Upstreams)
+            {
+                <div><code>@upstream</code></div>
+            }
+        </MudTd>
+        <MudTd DataLabel="TLS">
+            <MudChip T="string" Size="Size.Small" Color="@(context.Tls == "off" ? Color.Default : Color.Success)">@context.Tls</MudChip>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No routes configured.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private void OnSearchChanged() => StateHasChanged();
+
+    private static Color SourceColor(string source) => source switch
+    {
+        "file" => Color.Primary,
+        "mappings" => Color.Secondary,
+        "docker" => Color.Tertiary,
+        _ => Color.Default,
+    };
+
+    protected override RoutesViewModel CreateViewModel(IServiceProvider serviceProvider) =>
+        serviceProvider.GetRequiredService<RoutesViewModel>();
+}

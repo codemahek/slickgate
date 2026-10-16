@@ -1,0 +1,141 @@
+﻿@page "/"
+@inherits ReactiveComponentBase<DashboardViewModel>
+@inject GatewaySettings Gateway
+@inject ISnackbar Snackbar
+
+<PageTitle>Slickgate · Dashboard</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-1">Dashboard</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Connected to <MudLink Href="/settings">@Gateway.BaseUrl</MudLink>
+</MudText>
+
+@if (ViewModel!.ErrorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4" Variant="Variant.Outlined">
+        <MudText>@ViewModel!.ErrorMessage</MudText>
+        <MudButton Href="/settings" Color="Color.Error" Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Settings">Open settings</MudButton>
+    </MudAlert>
+}
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Status</MudText>
+                <div Class="d-flex align-center">
+                    <MudText Typo="Typo.h5">@(ViewModel!.Health?.Status ?? "—")</MudText>
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="@(ViewModel!.Health is null ? Color.Default : Color.Success)" />
+                </div>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Effective routes</MudText>
+                <div Class="d-flex align-center">
+                    <MudText Typo="Typo.h5">@(ViewModel!.Health?.Routes.ToString() ?? "—")</MudText>
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.AltRoute" Color="Color.Primary" />
+                </div>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Uptime</MudText>
+                <div Class="d-flex align-center">
+                    <MudText Typo="Typo.h5">@FormatUptime(ViewModel!.Health?.UptimeSeconds)</MudText>
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Secondary" />
+                </div>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Docker</MudText>
+                <div Class="d-flex align-center">
+                    <MudText Typo="Typo.h5">@(ViewModel!.Config is null ? "—" : (ViewModel!.Config.Docker.Enabled ? "On" : "Off"))</MudText>
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.Dns" Color="@(ViewModel!.Config?.Docker.Enabled == true ? Color.Success : Color.Default)" />
+                </div>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudCard>
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Configuration</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudButton StartIcon="@Icons.Material.Filled.Refresh"
+                       Variant="Variant.Outlined"
+                       Disabled="@ViewModel!.IsLoading"
+                       OnClick="@(() => ViewModel!.RefreshAsync())">Refresh</MudButton>
+            <MudButton StartIcon="@Icons.Material.Filled.RestartAlt"
+                       Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       Disabled="@ViewModel!.IsReloading"
+                       OnClick="ReloadAsync">Reload config</MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (ViewModel!.Config is null)
+        {
+            <MudText Class="mud-text-secondary">No configuration loaded.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true">
+                <tbody>
+                    <tr><td class="mud-text-secondary">Config file</td><td><code>@ViewModel!.Config.ConfigPath</code></td></tr>
+                    <tr><td class="mud-text-secondary">Revision</td><td><code>@ViewModel!.Config.Revision</code></td></tr>
+                    <tr><td class="mud-text-secondary">Listen</td><td>http :@ViewModel!.Config.Server.HttpPort · https :@ViewModel!.Config.Server.HttpsPort</td></tr>
+                    <tr><td class="mud-text-secondary">Redirect HTTP→HTTPS</td><td>@(ViewModel!.Config.Server.RedirectHttpToHttps ? "on" : "off")</td></tr>
+                    <tr><td class="mud-text-secondary">ACME</td><td>@(ViewModel!.Config.Acme.Enabled ? $"enabled ({ViewModel!.Config.Acme.Email})" : "disabled")</td></tr>
+                    <tr><td class="mud-text-secondary">Docker network</td><td>@ViewModel!.Config.Docker.Network · label <code>@ViewModel!.Config.Docker.LabelPrefix.*</code></td></tr>
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private async Task ReloadAsync()
+    {
+        var error = await ViewModel!.ReloadConfigAsync();
+        if (error is null)
+        {
+            Snackbar.Add("Configuration reloaded.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(error, Severity.Error);
+        }
+    }
+
+    private static string FormatUptime(long? seconds)
+    {
+        if (seconds is not { } s)
+        {
+            return "—";
+        }
+
+        var span = TimeSpan.FromSeconds(s);
+        return span.TotalHours >= 1
+            ? $"{(int)span.TotalHours}h {span.Minutes}m"
+            : span.TotalMinutes >= 1
+                ? $"{(int)span.TotalMinutes}m {span.Seconds}s"
+                : $"{span.Seconds}s";
+    }
+
+    protected override DashboardViewModel CreateViewModel(IServiceProvider serviceProvider) =>
+        serviceProvider.GetRequiredService<DashboardViewModel>();
+}

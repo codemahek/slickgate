@@ -5,6 +5,7 @@
 # Then browse:
 #   http://app.localhost:8080     -> static route from /etc/slickgate/gateway.yaml
 #   http://whoami.localhost:8080  -> route discovered from Docker labels
+#   http://localhost:8081         -> standalone admin UI (Blazor WebAssembly)
 #
 # (add app.localhost / whoami.localhost to your hosts file, or use
 #  curl --resolve app.localhost:8080:127.0.0.1 ... on Windows/macOS where
@@ -25,6 +26,21 @@ services:
       - slickgate-data:/data
     networks:
       - slickgate
+    restart: unless-stopped
+
+  # Standalone admin UI. Talks to the gateway exclusively over its admin HTTP
+  # API (CORS origin below must include http://localhost:8081).
+  admin:
+    build:
+      context: .
+      dockerfile: src/Slickgate.Admin/Dockerfile
+    image: slickgate-admin:dev
+    ports:
+      - "8081:80"
+    networks:
+      - slickgate
+    depends_on:
+      - gateway
     restart: unless-stopped
 
   # Statically configured upstream (referenced by the bundled gateway.yaml).

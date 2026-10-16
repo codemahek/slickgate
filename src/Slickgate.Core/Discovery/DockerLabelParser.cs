@@ -25,6 +25,16 @@ public sealed record ContainerFacts
 /// </summary>
 public static class DockerLabelParser
 {
+    /// <summary>True when the container opted in via the (case-insensitive) enable label.</summary>
+    public static bool IsEnabled(IReadOnlyDictionary<string, string> labels, string labelPrefix)
+    {
+        var prefix = labelPrefix.TrimEnd('.') + ".";
+        return TryGet(labels, prefix + "enable", out var value) && IsTruthy(value);
+    }
+
+    /// <summary>Derives a stable route id from a container name.</summary>
+    public static string Slugify(string name) => Slug(name.TrimStart('/'));
+
     public static RouteDefinition? Parse(
         IReadOnlyDictionary<string, string> labels,
         ContainerFacts facts,

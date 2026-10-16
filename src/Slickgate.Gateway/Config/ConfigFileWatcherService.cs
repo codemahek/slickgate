@@ -1,8 +1,8 @@
 namespace Slickgate.Gateway.Config;
 
 /// <summary>
-/// Watches the YAML config file and hot-applies changes (debounced), like
-/// <c>caddy reload</c> without needing a signal or restart.
+/// Watches the YAML config file and the mappings overlay, hot-applying changes
+/// (debounced), like <c>caddy reload</c> without needing a signal or restart.
 /// </summary>
 public sealed class ConfigFileWatcherService(
     ConfigReloader reloader,
@@ -12,24 +12,11 @@ public sealed class ConfigFileWatcherService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var fullPath = reloader.ConfigPath;
-        var directory = Path.GetDirectoryName(fullPath);
-        var fileName = Path.GetFileName(fullPath);
-
-        if (directory is null || !Directory.Exists(directory))
-        {
-            logger.LogWarning("Config directory {Dir} does not exist; watching disabled.", directory);
-            return;
-        }
-
+        // Reload once at startup so both config and mappings are applied.
         reloader.TryReload(out _);
 
         using var changed = new SemaphoreSlim(0);
-        using var watcher = new FileSystemWatcher(directory, fileName)
-        {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName |
-                           NotifyFilters.Size | NotifyFilters.CreationTime,
-        };
+        var watchers = new List<FileSystemWatcher>();
 
         void Signal()
         {
@@ -39,31 +26,76 @@ public sealed class ConfigFileWatcherService(
             }
         }
 
-        watcher.Changed += (_, _) => Signal();
-        watcher.Created += (_, _) => Signal();
-        watcher.Renamed += (_, _) => Signal();
-        watcher.Deleted += (_, _) => Signal();
-        watcher.EnableRaisingEvents = true;
-
-        logger.LogInformation("Watching {Path} for changes.", fullPath);
-
-        while (!stoppingToken.IsCancellationRequested)
+        foreach (var file in new[] { reloader.ConfigPath, reloader.MappingsPath })
         {
-            try
+            var watcher = TryWatch(file, Signal, logger);
+            if (watcher is not null)
             {
-                await changed.WaitAsync(stoppingToken);
-                await Task.Delay(Debounce, stoppingToken);
-                while (changed.CurrentCount > 0)
-                {
-                    changed.Wait(0);
-                }
-
-                reloader.TryReload(out _);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
+                watchers.Add(watcher);
+                logger.LogInformation("Watching {Path} for changes.", file);
             }
         }
+
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await changed.WaitAsync(stoppingToken);
+                    await Task.Delay(Debounce, stoppingToken);
+                    while (changed.CurrentCount > 0)
+                    {
+                        changed.Wait(0);
+                    }
+
+                    reloader.TryReload(out _);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            foreach (var watcher in watchers)
+            {
+                watcher.Dispose();
+            }
+        }
+    }
+
+    private static FileSystemWatcher? TryWatch(
+        string path,
+        Action onChanged,
+        ILogger logger)
+    {
+        var directory = Path.GetDirectoryName(path);
+        var fileName = Path.GetFileName(path);
+
+        if (string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(fileName))
+        {
+            return null;
+        }
+
+        if (!Directory.Exists(directory))
+        {
+            logger.LogWarning("Directory {Dir} does not exist; not watching {File}.", directory, fileName);
+            return null;
+        }
+
+        var watcher = new FileSystemWatcher(directory, fileName)
+        {
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName |
+                           NotifyFilters.Size | NotifyFilters.CreationTime,
+        };
+
+        watcher.Changed += (_, _) => onChanged();
+        watcher.Created += (_, _) => onChanged();
+        watcher.Renamed += (_, _) => onChanged();
+        watcher.Deleted += (_, _) => onChanged();
+        watcher.EnableRaisingEvents = true;
+        return watcher;
     }
 }

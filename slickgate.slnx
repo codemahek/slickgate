@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Slickgate.Core/Slickgate.Core.csproj" />
     <Project Path="src/Slickgate.Gateway/Slickgate.Gateway.csproj" />
+    <Project Path="src/Slickgate.Admin/Slickgate.Admin.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Slickgate.Core.Tests/Slickgate.Core.Tests.csproj" />

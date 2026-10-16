@@ -88,14 +88,13 @@ public sealed class DockerDiscoveryService(
         CancellationToken ct)
     {
         var containers = await client.ListRunningContainersAsync(ct);
-        var prefix = config.LabelPrefix.TrimEnd('.') + "." + "enable";
 
         var routes = new List<RouteDefinition>();
         foreach (var container in containers)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (container.Labels is null || !HasLabel(container.Labels, prefix))
+            if (container.Labels is null || !DockerLabelParser.IsEnabled(container.Labels, config.LabelPrefix))
             {
                 continue;
             }
@@ -134,20 +133,6 @@ public sealed class DockerDiscoveryService(
         }
 
         return routes;
-    }
-
-    private static bool HasLabel(IReadOnlyDictionary<string, string> labels, string key)
-    {
-        foreach (var (k, v) in labels)
-        {
-            if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase) &&
-                v.Trim().ToLowerInvariant() is "true" or "yes" or "on" or "1")
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static int GetPort(IReadOnlyDictionary<string, string> labels, string labelPrefix)

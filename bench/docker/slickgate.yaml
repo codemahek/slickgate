@@ -1,0 +1,30 @@
+# Docker benchmark configuration for Slickgate.
+#
+# One catch-all route to the in-network backend. `hosts` is intentionally empty
+# so the route matches any Host header (containers address each other by name).
+# Everything that costs work (ACME, Docker polling, telemetry) is off so the
+# numbers isolate proxy overhead.
+
+server:
+  http_port: 80
+  https_port: 443
+  redirect_http_to_https: false
+
+admin:
+  enabled: true
+
+acme:
+  enabled: false
+
+docker:
+  enabled: false
+
+telemetry:
+  otlp_endpoint: null
+
+routes:
+  - id: catch-all
+    path_prefix: /
+    upstreams:
+      - http://bench-backend:8088
+    tls: off
