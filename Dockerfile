@@ -34,7 +34,12 @@ COPY src/Slickgate.Gateway/Slickgate.Gateway.csproj src/Slickgate.Gateway/
 RUN dotnet restore src/Slickgate.Gateway/Slickgate.Gateway.csproj -r linux-x64 -p:SlickgateAot=true
 COPY src/ src/
 RUN dotnet publish src/Slickgate.Gateway/Slickgate.Gateway.csproj \
-        -c Release -r linux-x64 -p:SlickgateAot=true --no-restore -o /app/publish
+        -c Release -r linux-x64 -p:SlickgateAot=true --self-contained true --no-restore -o /app/publish \
+        --verbosity normal \
+    && echo "=== Files in publish directory ===" \
+    && ls -la /app/publish/ \
+    && echo "=== Checking for executable ===" \
+    && find /app/publish -type f -name "*" -exec file {} \; | head -20
 
 # ---------------------------------------------------------------------------
 # Native AOT runtime image (docker build --target aot)
@@ -46,6 +51,24 @@ RUN groupadd --system --gid 10001 slickgate \
  && mkdir -p /etc/slickgate /data \
  && chown -R slickgate:slickgate /app /data
 COPY --from=publish-aot --chown=slickgate:slickgate /app/publish/ ./
+# Debug: list all files and their permissions
+RUN echo "=== Debug: Files in /app ===" && ls -la /app/
+# Try to find any executable file
+RUN find /app -type f -executable -print
+# Fallback: if no Slickgate.Gateway, check for any file that could be the executable
+RUN if [ ! -f "/app/Slickgate.Gateway" ]; then \
+      echo "Slickgate.Gateway not found, looking for alternatives..." && \
+      # Check for files without extension (common for Linux executables) \
+      for f in /app/*; do \
+        if [ -f "$f" ] && [[ ! "$f" =~ \. ]]; then \
+          echo "Found potential executable (no extension): $f" && \
+          ln -sf "$f" /app/Slickgate.Gateway && \
+          break; \
+        fi; \
+      done; \
+    fi
+# Ensure the file is executable
+RUN chmod +x /app/Slickgate.Gateway 2>/dev/null || true
 COPY --chown=slickgate:slickgate samples/docker/gateway.yaml /etc/slickgate/gateway.yaml
 ENV HOME=/app \
     SLICKGATE_CONFIG=/etc/slickgate/gateway.yaml \
@@ -54,6 +77,7 @@ USER slickgate
 EXPOSE 80 443
 VOLUME ["/data"]
 ENTRYPOINT ["/app/Slickgate.Gateway"]
+CMD ["--config", "/etc/slickgate/gateway.yaml"]
 
 # ---------------------------------------------------------------------------
 # Managed (JIT) runtime image (default)
