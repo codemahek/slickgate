@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -20,13 +21,14 @@ public sealed class CertificateManager(string storageDir)
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly X509Certificate2 _fallback = CreateSelfSigned("slickgate.default");
-    private volatile Dictionary<string, TlsMode> _modes = new(StringComparer.OrdinalIgnoreCase);
+    private volatile FrozenDictionary<string, TlsMode> _modes =
+        FrozenDictionary<string, TlsMode>.Empty;
 
     private readonly ConcurrentDictionary<string, X509Certificate2> _file =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private volatile Dictionary<string, (string CertFile, string KeyFile)> _fileSources =
-        new(StringComparer.OrdinalIgnoreCase);
+    private volatile FrozenDictionary<string, (string CertFile, string KeyFile)> _fileSources =
+        FrozenDictionary<string, (string CertFile, string KeyFile)>.Empty;
 
     public string StorageDir { get; } = Path.GetFullPath(storageDir);
 
@@ -54,8 +56,8 @@ public sealed class CertificateManager(string storageDir)
             }
         }
 
-        _modes = modes;
-        _fileSources = sources;
+        _modes = modes.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        _fileSources = sources.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
         // Drop cached certificates whose host is no longer file-backed.
         foreach (var host in _file.Keys)
@@ -118,7 +120,7 @@ public sealed class CertificateManager(string storageDir)
         _selfSigned.GetOrAdd(host, CreateSelfSigned);
 
     public X509Certificate2? GetAcme(string host) =>
-        _acme.TryGetValue(host, out var cert) ? cert : null;
+        _acme.GetValueOrDefault(host);
 
     /// <summary>(Re)loads the ACME certificate for a host from disk. Returns null when absent/invalid.</summary>
     public X509Certificate2? ReloadAcme(string host)

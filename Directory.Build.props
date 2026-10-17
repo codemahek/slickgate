@@ -3,7 +3,7 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>15.0</LangVersion>
     <AnalysisLevel>latest</AnalysisLevel>
     <VersionPrefix>0.1.0</VersionPrefix>
     <Authors>codemahek</Authors>
