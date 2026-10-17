@@ -68,6 +68,9 @@ if (!string.IsNullOrWhiteSpace(otlpEndpoint))
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
+    // Match Caddy: no request body size limit (Kestrel defaults to ~28.6 MiB).
+    kestrel.Limits.MaxRequestBodySize = null;
+
     if (hostOptions.HttpPort > 0)
     {
         kestrel.ListenAnyIP(hostOptions.HttpPort);
