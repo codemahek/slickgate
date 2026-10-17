@@ -86,4 +86,88 @@ public class RouteMatcherTests
 
         Assert.Null(RouteMatcher.Match([route], "b.example.com", "/"));
     }
+
+    [Fact]
+    public void NoHosts_MatchesAnyHost()
+    {
+        var route = Route("a", [], prefix: "/api");
+
+        Assert.NotNull(RouteMatcher.Match([route], "anything.example.com", "/api"));
+        Assert.NotNull(RouteMatcher.Match([route], null, "/api"));
+    }
+
+    [Fact]
+    public void PathComparison_IsCaseInsensitive()
+    {
+        var exact = Route("exact", ["example.com"], exact: "/Health");
+        var prefix = Route("prefix", ["example.com"], prefix: "/API");
+
+        Assert.NotNull(RouteMatcher.Match([exact], "example.com", "/health"));
+        Assert.NotNull(RouteMatcher.Match([prefix], "example.com", "/api/users"));
+    }
+
+    [Fact]
+    public void PathComparison_IgnoresTrailingSlash()
+    {
+        var exact = Route("exact", ["example.com"], exact: "/health");
+        var prefix = Route("prefix", ["example.com"], prefix: "/api");
+
+        Assert.NotNull(RouteMatcher.Match([exact], "example.com", "/health/"));
+        Assert.NotNull(RouteMatcher.Match([prefix], "example.com", "/api/"));
+    }
+
+    [Fact]
+    public void MissingPath_TreatedAsRoot()
+    {
+        var route = Route("a", ["example.com"], prefix: "/");
+
+        Assert.NotNull(RouteMatcher.Match([route], "example.com", null));
+        Assert.NotNull(RouteMatcher.Match([route], "example.com", ""));
+    }
+
+    [Fact]
+    public void PrefixWithoutLeadingSlash_StillMatches()
+    {
+        var route = Route("a", ["example.com"], prefix: "api");
+
+        Assert.NotNull(RouteMatcher.Match([route], "example.com", "/api"));
+        Assert.NotNull(RouteMatcher.Match([route], "example.com", "/api/users"));
+        Assert.Null(RouteMatcher.Match([route], "example.com", "/apix"));
+    }
+
+    [Fact]
+    public void WithoutOrder_DeclarationOrderWins()
+    {
+        var first = Route("first", ["example.com"], prefix: "/");
+        var second = Route("second", ["example.com"], prefix: "/");
+
+        Assert.Same(first, RouteMatcher.Match([first, second], "example.com", "/"));
+    }
+
+    [Fact]
+    public void EqualOrder_FirstDeclaredWins()
+    {
+        var first = Route("first", ["example.com"], prefix: "/", order: 5);
+        var second = Route("second", ["example.com"], prefix: "/", order: 5);
+
+        Assert.Same(first, RouteMatcher.Match([first, second], "example.com", "/"));
+    }
+
+    [Fact]
+    public void MatchesHost_IgnoresPort()
+    {
+        var route = Route("a", ["example.com"], prefix: "/");
+
+        Assert.True(RouteMatcher.MatchesHost(route, "example.com:443"));
+        Assert.False(RouteMatcher.MatchesHost(route, "other.com"));
+    }
+
+    [Fact]
+    public void MatchesPath_Standalone()
+    {
+        var route = Route("a", ["example.com"], prefix: "/api");
+
+        Assert.True(RouteMatcher.MatchesPath(route, "/api/users"));
+        Assert.False(RouteMatcher.MatchesPath(route, "/apix"));
+    }
 }
