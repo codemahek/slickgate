@@ -64,8 +64,9 @@ internal static class MappingConverter
         null or "" or "off" or "false" or "no" => TlsMode.Off,
         "internal" => TlsMode.Internal,
         "auto" => TlsMode.Auto,
+        "file" => TlsMode.File,
         _ => throw new SlickgateConfigException(
-            $"Invalid tls mode '{value}' (expected off, internal, or auto)."),
+            $"Invalid tls mode '{value}' (expected off, internal, auto, or file)."),
     };
 
     private static TimeSpan ParseDuration(string? value, TimeSpan fallback) =>

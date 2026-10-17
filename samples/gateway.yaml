@@ -29,6 +29,12 @@ docker:
 telemetry:
   # otlp_endpoint: http://localhost:4317
 
+# Installed once, used by every route with `tls: file`. Useful behind another
+# TLS terminator (CDN, load balancer) or with an internal CA / own wildcard.
+tls:
+  cert_file: ./certs/origin.pem
+  key_file: ./certs/origin.key
+
 routes:
   - id: api
     host: api.example.com
@@ -36,7 +42,7 @@ routes:
     upstreams:
       - http://127.0.0.1:5099
     strip_prefix: /api
-    tls: off                 # off | internal (self-signed) | auto (Let's Encrypt)
+    tls: off                 # off | internal (self-signed) | auto (ACME) | file
     request_headers:
       set:
         X-Gateway: slickgate
@@ -47,6 +53,26 @@ routes:
       path: /
       interval: 10s
       timeout: 2s
+
+  # Static file server — no upstream. `index.html` is served for directory
+  # requests; paths are normalised so `..` cannot escape `static_root`.
+  - id: home
+    hosts: [example.com, www.example.com]
+    path_prefix: /
+    static_root: ./www
+    tls: file
+
+  # HTTP basic auth in front of an upstream. `password_hash` is a bcrypt hash
+  # (Caddy/Slickgate `$2y$…` and `$2a$…` are both accepted).
+  - id: nas
+    host: my-nas.example.com
+    path_prefix: /
+    upstreams:
+      - http://127.0.0.1:81
+    tls: file
+    basic_auth:
+      - user: rishi
+        password_hash: $2a$05$s/qPQElSJre9RA82467.qOc.jJgT7X/59vEtY9lHM.44UosArUSZy
 
   - id: catch-all
     hosts: [localhost, 127.0.0.1]

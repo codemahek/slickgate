@@ -93,6 +93,10 @@ docker:
   label_prefix: slickgate
   poll_interval: 10s
 
+tls:                          # used by routes with `tls: file`
+  cert_file: ./certs/origin.pem
+  key_file: ./certs/origin.key
+
 routes:
   - id: api
     host: api.example.com
@@ -115,7 +119,23 @@ routes:
     upstreams:
       - http://127.0.0.1:5002
     tls: auto
+
+  - id: home                 # static file server (no upstream)
+    hosts: [example.com, www.example.com]
+    path_prefix: /
+    static_root: ./www
+    tls: file
+
+  - id: nas                  # basic auth in front of an upstream
+    host: my-nas.example.com
+    upstreams:
+      - http://127.0.0.1:81
+    tls: file
+    basic_auth:
+      - user: rishi
+        password_hash: $2a$05$s/qPQElSJre9RA82467.qOc.jJgT7X/59vEtY9lHM.44UosArUSZy
 ```
+
 
 ### Reference
 
@@ -134,12 +154,15 @@ routes:
 |           | `endpoint`             | `unix:///var/run/docker.sock` | Also `npipe://` and `tcp://`               |
 |           | `network`              | `slickgate`             | Network to resolve container IPs on              |
 |           | `poll_interval`        | `10s`                   | Durations accept `d/h/m/s/ms`                    |
+| `tls`     | `cert_file` / `key_file` | –                     | BYO PEM cert/key used by routes with `tls: file` |
 | `route`   | `id`                   | –                       | Required, unique                                 |
 |           | `host` / `hosts`       | –                       | At least one of host or `path_*` required        |
 |           | `path_prefix` / `path_exact` | –                 | Prefix matches are `{**catch-all}` templates     |
-|           | `upstreams`            | –                       | Required, `http(s)://host[:port]`                |
+|           | `upstreams`            | –                       | `http(s)://host[:port]`; required unless `static_root` |
+|           | `static_root`          | –                       | Serve files from this directory (no upstream)    |
+|           | `basic_auth`           | –                       | List of `{user, password_hash}` (bcrypt `$2a$`/`$2y$`) |
 |           | `strip_prefix`         | –                       | Removes a prefix before forwarding               |
-|           | `tls`                  | `off`                   | `off` \| `internal` (self-signed) \| `auto` (ACME) |
+|           | `tls`                  | `off`                   | `off` \| `internal` (self-signed) \| `auto` (ACME) \| `file` (BYO cert) |
 |           | `request_headers.set`  | –                       | Map of header → value                            |
 |           | `response_headers.set` | –                       | Map of header → value                            |
 |           | `health_check`         | –                       | `path`, `interval`, `timeout`                    |
@@ -157,7 +180,7 @@ Every label is prefixed (default `slickgate`, configurable via
 | `slickgate.port`          | `3000`              | Container port to proxy to (default `80`) |
 | `slickgate.id`            | `app`               | Route id (defaults to a slug of the name) |
 | `slickgate.path`          | `/api`              | Path prefix (default `/`)                 |
-| `slickgate.tls`           | `internal`          | `off` \| `internal` \| `auto`             |
+| `slickgate.tls`           | `internal`          | `off` \| `internal` \| `auto` \| `file`   |
 | `slickgate.strip_prefix`  | `true` or `/api`    | Strip the path prefix                     |
 | `slickgate.health_path`   | `/healthz`          | Active health-check endpoint              |
 | `slickgate.order`         | `5`                 | Route priority                            |

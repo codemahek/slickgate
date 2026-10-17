@@ -22,6 +22,12 @@ public sealed class CertificateManager
     private readonly X509Certificate2 _fallback;
     private volatile Dictionary<string, TlsMode> _modes = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly ConcurrentDictionary<string, X509Certificate2> _file =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private volatile Dictionary<string, (string CertFile, string KeyFile)> _fileSources =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public CertificateManager(string storageDir)
     {
         StorageDir = Path.GetFullPath(storageDir);
@@ -30,21 +36,41 @@ public sealed class CertificateManager
 
     public string StorageDir { get; }
 
-    public void UpdateRoutes(IEnumerable<RouteDefinition> routes)
+    public void UpdateRoutes(GatewayConfig config)
     {
         var modes = new Dictionary<string, TlsMode>(StringComparer.OrdinalIgnoreCase);
-        foreach (var route in routes)
+        var sources = new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var route in config.Routes)
         {
+            var certFile = route.CertFile ?? config.Tls.CertFile;
+            var keyFile = route.KeyFile ?? config.Tls.KeyFile;
+
             foreach (var host in route.Hosts)
             {
                 if (route.Tls != TlsMode.Off)
                 {
                     modes.TryAdd(host, route.Tls);
                 }
+
+                if (route.Tls == TlsMode.File && certFile is not null && keyFile is not null)
+                {
+                    sources.TryAdd(host, (certFile, keyFile));
+                }
             }
         }
 
         _modes = modes;
+        _fileSources = sources;
+
+        // Drop cached certificates whose host is no longer file-backed.
+        foreach (var host in _file.Keys)
+        {
+            if (!sources.ContainsKey(host))
+            {
+                _file.TryRemove(host, out _);
+            }
+        }
     }
 
     /// <summary>Kestrel SNI callback.</summary>
@@ -60,8 +86,38 @@ public sealed class CertificateManager
         {
             TlsMode.Auto => GetAcme(sniHost) ?? GetSelfSigned(sniHost),
             TlsMode.Internal => GetSelfSigned(sniHost),
+            TlsMode.File => GetFile(sniHost) ?? GetSelfSigned(sniHost),
             _ => _fallback,
         };
+    }
+
+    /// <summary>
+    /// Loads (and caches) the bring-your-own certificate configured for a host via
+    /// <c>tls: file</c>. Returns null when the host has no file cert or it cannot be read.
+    /// </summary>
+    public X509Certificate2? GetFile(string host)
+    {
+        if (_file.TryGetValue(host, out var cached))
+        {
+            return cached;
+        }
+
+        if (!_fileSources.TryGetValue(host, out var source) ||
+            !File.Exists(source.CertFile) ||
+            !File.Exists(source.KeyFile))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var loaded = X509Certificate2.CreateFromPemFile(source.CertFile, source.KeyFile);
+            return _file.GetOrAdd(host, NormalizeForTls(loaded));
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public X509Certificate2 GetSelfSigned(string host) =>

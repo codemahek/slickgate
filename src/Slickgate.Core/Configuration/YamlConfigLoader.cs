@@ -46,6 +46,7 @@ public static class YamlConfigLoader
             Acme = ParseAcme(Map(map, "acme")),
             Docker = ParseDocker(Map(map, "docker")),
             Telemetry = ParseTelemetry(Map(map, "telemetry")),
+            Tls = ParseTlsSection(Map(map, "tls")),
             Routes = ParseRoutes(Seq(map, "routes")),
         };
 
@@ -123,9 +124,10 @@ public static class YamlConfigLoader
                 throw new SlickgateConfigException($"Duplicate route id '{route.Id}'.");
             }
 
-            if (route.Upstreams.Count == 0)
+            if (route.Upstreams.Count == 0 && route.StaticRoot is null)
             {
-                throw new SlickgateConfigException($"Route '{route.Id}' must declare at least one upstream.");
+                throw new SlickgateConfigException(
+                    $"Route '{route.Id}' must declare at least one upstream or a static_root.");
             }
 
             foreach (var upstream in route.Upstreams)
@@ -188,6 +190,14 @@ public static class YamlConfigLoader
             PollInterval = Duration(map, "poll_interval", TimeSpan.FromSeconds(10)),
         };
 
+    private static TlsConfig ParseTlsSection(YamlMappingNode? map) => map is null
+        ? new TlsConfig()
+        : new TlsConfig
+        {
+            CertFile = String(map, "cert_file"),
+            KeyFile = String(map, "key_file"),
+        };
+
     private static TelemetryConfig ParseTelemetry(YamlMappingNode? map) => map is null
         ? new TelemetryConfig()
         : new TelemetryConfig { OtlpEndpoint = String(map, "otlp_endpoint") };
@@ -234,6 +244,10 @@ public static class YamlConfigLoader
             Upstreams = StringList(map, "upstreams"),
             StripPrefix = String(map, "strip_prefix"),
             Tls = ParseTlsMode(String(map, "tls")),
+            CertFile = String(map, "cert_file"),
+            KeyFile = String(map, "key_file"),
+            StaticRoot = String(map, "static_root"),
+            BasicAuth = ParseBasicAuth(Seq(map, "basic_auth")),
             RequestHeadersSet = HeaderMap(requestHeaders, "set"),
             RequestHeadersAppend = HeaderMap(requestHeaders, "append"),
             ResponseHeadersSet = HeaderMap(responseHeaders, "set"),
@@ -244,13 +258,44 @@ public static class YamlConfigLoader
         };
     }
 
+    private static IReadOnlyList<BasicAuthUser> ParseBasicAuth(YamlSequenceNode? seq)
+    {
+        if (seq is null)
+        {
+            return [];
+        }
+
+        var users = new List<BasicAuthUser>();
+        foreach (var node in seq.Children)
+        {
+            if (node is not YamlMappingNode userMap)
+            {
+                throw new SlickgateConfigException(
+                    "Each 'basic_auth' entry must be a mapping with 'user' and 'password_hash'.");
+            }
+
+            var user = String(userMap, "user");
+            var hash = String(userMap, "password_hash");
+            if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(hash))
+            {
+                throw new SlickgateConfigException(
+                    "Each 'basic_auth' entry requires a non-empty 'user' and 'password_hash'.");
+            }
+
+            users.Add(new BasicAuthUser { User = user!, PasswordHash = hash! });
+        }
+
+        return users;
+    }
+
     private static TlsMode ParseTlsMode(string? value) => value?.Trim().ToLowerInvariant() switch
     {
         null or "" or "off" => TlsMode.Off,
         "internal" => TlsMode.Internal,
         "auto" => TlsMode.Auto,
+        "file" => TlsMode.File,
         _ => throw new SlickgateConfigException(
-            $"Invalid tls mode '{value}' (expected off, internal, or auto)."),
+            $"Invalid tls mode '{value}' (expected off, internal, auto, or file)."),
     };
 
     private static HealthCheckDefinition? ParseHealthCheck(YamlMappingNode? map)

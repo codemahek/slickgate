@@ -213,4 +213,107 @@ public class YamlConfigLoaderTests
 
         Assert.Contains("acme.email", ex.Message);
     }
+
+    [Fact]
+    public void Load_ParsesTlsFileStaticRootAndBasicAuth()
+    {
+        var config = YamlConfigLoader.Load("""
+            tls:
+              cert_file: /etc/slickgate/certs/origin.pem
+              key_file: /etc/slickgate/certs/origin.key
+
+            routes:
+              - id: home
+                hosts: [rishidaftary.com, www.rishidaftary.com]
+                static_root: /etc/slickgate/www
+                tls: file
+              - id: nas
+                host: my-nas.rishidaftary.com
+                upstreams: [http://192.168.68.50:81]
+                tls: file
+                basic_auth:
+                  - user: rishi
+                    password_hash: $2y$05$6uUIkaWu6eUy
+            """);
+
+        Assert.Equal("/etc/slickgate/certs/origin.pem", config.Tls.CertFile);
+        Assert.Equal("/etc/slickgate/certs/origin.key", config.Tls.KeyFile);
+
+        var home = config.Routes[0];
+        Assert.Equal(TlsMode.File, home.Tls);
+        Assert.Equal("/etc/slickgate/www", home.StaticRoot);
+        Assert.Empty(home.Upstreams);
+
+        var nas = config.Routes[1];
+        Assert.Equal(TlsMode.File, nas.Tls);
+        var user = Assert.Single(nas.BasicAuth);
+        Assert.Equal("rishi", user.User);
+        Assert.Equal("$2y$05$6uUIkaWu6eUy", user.PasswordHash);
+    }
+
+    [Fact]
+    public void Load_RejectsUnknownTlsMode()
+    {
+        var ex = Assert.Throws<SlickgateConfigException>(() => YamlConfigLoader.Load("""
+            routes:
+              - id: a
+                host: a.example.com
+                upstreams: [http://a:80]
+                tls: bogus
+            """));
+
+        Assert.Contains("Invalid tls mode", ex.Message);
+    }
+
+    [Fact]
+    public void Load_ParsesMigratedCaddyConfig()
+    {
+        var config = YamlConfigLoader.Load("""
+            server:
+              http_port: 80
+              https_port: 443
+              redirect_http_to_https: true
+
+            tls:
+              cert_file: /etc/slickgate/certs/origin.pem
+              key_file: /etc/slickgate/certs/origin.key
+
+            routes:
+              - id: jellyfin
+                host: jellyfin.rishidaftary.com
+                upstreams: [http://192.168.68.50:30013]
+                tls: file
+              - id: my-nas
+                host: my-nas.rishidaftary.com
+                upstreams: [http://192.168.68.50:81]
+                tls: file
+                basic_auth:
+                  - user: rishi
+                    password_hash: $2y$05$6uUIkaWu6eUyEzxrK/YsAe3epTq/anYwtVkWZykTQxk0Qf48ATk5e
+              - id: home
+                hosts: [rishidaftary.com, www.rishidaftary.com, home.rishidaftary.com]
+                static_root: /data/www
+                tls: file
+              - id: album
+                host: album.rishidaftary.com
+                upstreams: [http://192.168.68.50:30041]
+                tls: file
+              - id: hk-jain-parivar
+                host: hk-jain-parivar.rishidaftary.com
+                upstreams: [http://192.168.68.50:5691]
+                tls: file
+            """);
+
+        Assert.Equal(5, config.Routes.Count);
+        Assert.Equal("/etc/slickgate/certs/origin.pem", config.Tls.CertFile);
+
+        var home = config.Routes.Single(r => r.Id == "home");
+        Assert.Equal(3, home.Hosts.Count);
+        Assert.Equal("/data/www", home.StaticRoot);
+        Assert.Empty(home.Upstreams);
+
+        var nas = config.Routes.Single(r => r.Id == "my-nas");
+        Assert.Equal("rishi", Assert.Single(nas.BasicAuth).User);
+        Assert.All(config.Routes, r => Assert.Equal(TlsMode.File, r.Tls));
+    }
 }

@@ -19,6 +19,14 @@ public static class YarpConfigMapper
         for (var i = 0; i < config.Routes.Count; i++)
         {
             var route = config.Routes[i];
+
+            // Static routes are served by the Slickgate route middleware, not YARP.
+            // Keep the original index so ordering relative to proxied routes is stable.
+            if (route.StaticRoot is not null)
+            {
+                continue;
+            }
+
             routes.Add(MapRoute(route, i));
             clusters.Add(MapCluster(route));
         }

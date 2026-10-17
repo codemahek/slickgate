@@ -31,7 +31,7 @@ hostOptions.HttpsPort = initialConfig.Server.HttpsPort;
 var proxyProvider = new DynamicProxyConfigProvider();
 var runtime = new GatewayRuntime(proxyProvider);
 var certificates = new CertificateManager(initialConfig.Acme.StorageDir);
-runtime.Changed += config => certificates.UpdateRoutes(config.Routes);
+runtime.Changed += config => certificates.UpdateRoutes(config);
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -88,7 +88,7 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 
 // Publish the initial routes before the host starts so the first request is routed.
 runtime.SetFileConfig(initialConfig);
-certificates.UpdateRoutes(initialConfig.Routes);
+certificates.UpdateRoutes(initialConfig);
 
 var app = builder.Build();
 
@@ -99,6 +99,7 @@ app.UseMiddleware<AcmeChallengeMiddleware>();
 app.UseMiddleware<AdminCorsMiddleware>();
 app.MapAdminApi();
 app.UseMiddleware<HttpsRedirectMiddleware>();
+app.UseMiddleware<RouteMiddleware>();
 app.MapReverseProxy();
 
 app.Logger.LogInformation(

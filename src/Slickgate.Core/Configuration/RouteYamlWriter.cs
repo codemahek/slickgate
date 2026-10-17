@@ -56,10 +56,13 @@ public static class RouteYamlWriter
             sb.Append("    path_exact: ").Append(Scalar(route.PathExact)).Append('\n');
         }
 
-        sb.Append("    upstreams:\n");
-        foreach (var upstream in route.Upstreams)
+        if (route.Upstreams.Count > 0)
         {
-            sb.Append("      - ").Append(Scalar(upstream)).Append('\n');
+            sb.Append("    upstreams:\n");
+            foreach (var upstream in route.Upstreams)
+            {
+                sb.Append("      - ").Append(Scalar(upstream)).Append('\n');
+            }
         }
 
         if (route.StripPrefix is not null)
@@ -70,6 +73,31 @@ public static class RouteYamlWriter
         if (route.Tls != TlsMode.Off)
         {
             sb.Append("    tls: ").Append(route.Tls.ToString().ToLowerInvariant()).Append('\n');
+        }
+
+        if (route.CertFile is not null)
+        {
+            sb.Append("    cert_file: ").Append(Scalar(route.CertFile)).Append('\n');
+        }
+
+        if (route.KeyFile is not null)
+        {
+            sb.Append("    key_file: ").Append(Scalar(route.KeyFile)).Append('\n');
+        }
+
+        if (route.StaticRoot is not null)
+        {
+            sb.Append("    static_root: ").Append(Scalar(route.StaticRoot)).Append('\n');
+        }
+
+        if (route.BasicAuth.Count > 0)
+        {
+            sb.Append("    basic_auth:\n");
+            foreach (var user in route.BasicAuth)
+            {
+                sb.Append("      - user: ").Append(Scalar(user.User)).Append('\n');
+                sb.Append("        password_hash: ").Append(Scalar(user.PasswordHash)).Append('\n');
+            }
         }
 
         WriteHeaderMap(sb, "request_headers", route.RequestHeadersSet);

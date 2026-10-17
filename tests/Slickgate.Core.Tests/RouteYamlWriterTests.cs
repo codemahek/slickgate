@@ -133,4 +133,33 @@ public class RouteYamlWriterTests
 
         Assert.Equal(["a", "b"], loaded.Select(r => r.Id));
     }
+
+    [Fact]
+    public void RoundTrip_StaticAuthAndFileCert()
+    {
+        var route = new RouteDefinition
+        {
+            Id = "site",
+            Hosts = ["example.com"],
+            Tls = TlsMode.File,
+            CertFile = "/etc/slickgate/certs/origin.pem",
+            KeyFile = "/etc/slickgate/certs/origin.key",
+            StaticRoot = "/etc/slickgate/www",
+            BasicAuth =
+            [
+                new BasicAuthUser { User = "rishi", PasswordHash = "$2y$05$abc.def/ghi" },
+            ],
+        };
+
+        var yaml = RouteYamlWriter.Write([route]);
+        var loaded = Assert.Single(YamlConfigLoader.LoadRouteList(yaml));
+
+        Assert.Equal(TlsMode.File, loaded.Tls);
+        Assert.Equal("/etc/slickgate/certs/origin.pem", loaded.CertFile);
+        Assert.Equal("/etc/slickgate/certs/origin.key", loaded.KeyFile);
+        Assert.Equal("/etc/slickgate/www", loaded.StaticRoot);
+        var user = Assert.Single(loaded.BasicAuth);
+        Assert.Equal("rishi", user.User);
+        Assert.Equal("$2y$05$abc.def/ghi", user.PasswordHash);
+    }
 }
