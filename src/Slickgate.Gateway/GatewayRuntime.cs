@@ -11,7 +11,7 @@ namespace Slickgate.Gateway;
 /// </summary>
 public sealed class GatewayRuntime(DynamicProxyConfigProvider provider)
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private GatewayConfig _fileConfig = new();
     private IReadOnlyList<RouteDefinition> _mappingRoutes = [];
     private IReadOnlyList<RouteDefinition> _dockerRoutes = [];

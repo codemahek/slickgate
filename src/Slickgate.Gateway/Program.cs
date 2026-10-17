@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging.Console;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -31,7 +30,7 @@ hostOptions.HttpsPort = initialConfig.Server.HttpsPort;
 var proxyProvider = new DynamicProxyConfigProvider();
 var runtime = new GatewayRuntime(proxyProvider);
 var certificates = new CertificateManager(initialConfig.Acme.StorageDir);
-runtime.Changed += config => certificates.UpdateRoutes(config);
+runtime.Changed += certificates.UpdateRoutes;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 

@@ -46,7 +46,7 @@ public sealed class ConfigFileWatcherService(
                     await Task.Delay(Debounce, stoppingToken);
                     while (changed.CurrentCount > 0)
                     {
-                        changed.Wait(0);
+                        await changed.WaitAsync(0, stoppingToken);
                     }
 
                     reloader.TryReload(out _);

@@ -9,18 +9,14 @@ namespace Slickgate.Core.Proxy;
 /// snapshot's change token so YARP reloads atomically (same pattern as YARP's
 /// <c>InMemoryConfigProvider</c>).
 /// </summary>
-public sealed class DynamicProxyConfigProvider : IProxyConfigProvider
+public sealed class DynamicProxyConfigProvider(IReadOnlyList<RouteConfig> routes, IReadOnlyList<ClusterConfig> clusters)
+    : IProxyConfigProvider
 {
-    private volatile Snapshot _config;
+    private volatile Snapshot _config = new(routes, clusters, NewRevision());
 
     public DynamicProxyConfigProvider()
         : this([], [])
     {
-    }
-
-    public DynamicProxyConfigProvider(IReadOnlyList<RouteConfig> routes, IReadOnlyList<ClusterConfig> clusters)
-    {
-        _config = new Snapshot(routes, clusters, NewRevision());
     }
 
     public IProxyConfig GetConfig() => _config;

@@ -11,7 +11,7 @@ namespace Slickgate.Gateway.Certificates;
 /// loaded from <c>{storage}/{host}/</c>; anything else falls back to an on-the-fly
 /// self-signed certificate so TLS never fails during bootstrap.
 /// </summary>
-public sealed class CertificateManager
+public sealed class CertificateManager(string storageDir)
 {
     private readonly ConcurrentDictionary<string, X509Certificate2> _selfSigned =
         new(StringComparer.OrdinalIgnoreCase);
@@ -19,7 +19,7 @@ public sealed class CertificateManager
     private readonly ConcurrentDictionary<string, X509Certificate2> _acme =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly X509Certificate2 _fallback;
+    private readonly X509Certificate2 _fallback = CreateSelfSigned("slickgate.default");
     private volatile Dictionary<string, TlsMode> _modes = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ConcurrentDictionary<string, X509Certificate2> _file =
@@ -28,13 +28,7 @@ public sealed class CertificateManager
     private volatile Dictionary<string, (string CertFile, string KeyFile)> _fileSources =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public CertificateManager(string storageDir)
-    {
-        StorageDir = Path.GetFullPath(storageDir);
-        _fallback = CreateSelfSigned("slickgate.default");
-    }
-
-    public string StorageDir { get; }
+    public string StorageDir { get; } = Path.GetFullPath(storageDir);
 
     public void UpdateRoutes(GatewayConfig config)
     {
