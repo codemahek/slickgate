@@ -164,15 +164,42 @@ Every label is prefixed (default `slickgate`, configurable via
 
 ## Admin API
 
-| Method | Path        | Description                          |
-| ------ | ----------- | ------------------------------------ |
-| GET    | `/-/health` | Liveness/health (always open)        |
-| GET    | `/-/routes` | Effective routes (file + Docker)     |
-| GET    | `/-/config` | Effective configuration              |
-| POST   | `/-/reload` | Re-read the config file from disk    |
+| Method | Path                   | Description                        |
+| ------ | ---------------------- | ---------------------------------- |
+| GET    | `/-/health`            | Liveness/health (always open)      |
+| GET    | `/-/routes`            | Effective routes (file + Docker)   |
+| GET    | `/-/config`            | Effective configuration            |
+| POST   | `/-/reload`            | Re-read the config file from disk  |
+| GET    | `/-/docker/containers` | Discoverable Docker containers     |
+| GET    | `/-/mappings`          | List admin mappings (overlay)      |
+| PUT    | `/-/mappings/{id}`     | Create or replace a mapping        |
+| DELETE | `/-/mappings/{id}`     | Delete a mapping                   |
 
 When `admin.token` is set, all endpoints except `/-/health` require the
 `X-Slickgate-Token` header.
+
+## Admin UI
+
+A standalone Blazor WebAssembly dashboard built with
+[MudBlazor](https://mudblazor.com/) and
+[ReactiveUI](https://www.reactiveui.net/). It is deployed as its own container
+(static files served by nginx) and talks to the gateway only through the admin
+API above, so the gateway and UI can be deployed, updated, and scaled
+independently.
+
+```bash
+docker build -f src/Slickgate.Admin/Dockerfile -t slickgate-admin .
+docker run --rm -p 8081:80 slickgate-admin
+```
+
+Point it at a gateway from the **Settings** page (base URL + optional token);
+the connection is kept in the browser. If the UI is served from a different
+origin, add it to `admin.cors_origins` in the gateway config.
+
+Pages: **dashboard** (health + live route/backend counts), **routes**,
+**mappings** (CRUD against the overlay), **Docker containers** (import a
+discovered container as a mapping), and **settings** (edit + test the gateway
+connection).
 
 ## Native AOT
 
@@ -204,38 +231,28 @@ tests/
 samples/                 example configs
 ```
 
-## Benchmark: Slickgate vs Caddy 2.11.7
+## Benchmarks
 
-Recent performance tests show Slickgate outperforming Caddy in throughput and memory efficiency, especially under high concurrent loads.
+Slickgate is benchmarked head-to-head against Caddy 2.11.7 with
+[oha](https://github.com/hatoo/oha) driving a 1 KiB static backend (per-request
+logging silenced on both sides). Two harnesses live under
+[`bench/`](bench/README.md): `run.ps1` compares both proxies as native Windows
+processes, and `run-docker.ps1` compares them as Linux containers.
 
-### Performance Summary (Windows 11, 16 cores)
+Representative native Windows run (20 s, 200 concurrent connections, 16-core
+host):
 
-| Concurrency | Slickgate (JIT) | Caddy 2.11.7 | Advantage |
-|-------------|-----------------|--------------|-----------|
-| 50          | 42,970 req/s    | 29,239 req/s | **+47%** |
-| 100         | 27,344 req/s    | 26,880 req/s | **+1.7%** |
-| 200         | 44,071 req/s    | 16,237 req/s | **+171%** |
-| 400         | 31,257 req/s    | 5,157 req/s  | **+506%** |
+| Proxy           | req/s   | avg    | p99    | peak private |
+| --------------- | ------- | ------ | ------ | ------------ |
+| Slickgate (JIT) | ~44,000 | 4.5 ms | 13 ms  | ~125 MB      |
+| Caddy 2.11.7    | ~16,600 | 5.3 ms | 51 ms  | ~730 MB      |
 
-### Memory Efficiency
+In containers on this machine Slickgate sustained ~40k req/s while Caddy collapsed
+to ~5k under high concurrency — but that is almost certainly a WSL2
+virtualized-network artifact, not a fair reflection of Caddy. See
+[`bench/README.md`](bench/README.md) for the full methodology, the concurrency
+sweep, the caveats, and how to reproduce the run on a native Linux host.
 
-| Concurrency | Slickgate Peak Memory | Caddy Peak Memory | Memory Saved |
-|-------------|----------------------|------------------|--------------|
-| 50          | 75.7 MB              | 89.6 MB          | **15%** |
-| 200         | 129.1 MB             | 807.2 MB         | **84%** |
-| 400         | 148.7 MB             | 901.2 MB         | **84%** |
-
-### Key Findings
-
-1. **Better Scaling**: Slickgate maintains high throughput (31-44k req/s) across concurrency levels, while Caddy performance degrades significantly at higher loads.
-
-2. **Superior Memory Management**: Slickgate uses 84% less memory than Caddy at 200+ concurrent connections.
-
-3. **Consistent Latency**: Slickgate shows more predictable latency distribution with lower P90 and P99 latencies.
-
-4. **Docker Performance**: In containerized environments, Slickgate maintains ~41k req/s while Caddy shows performance degradation.
-
-*Benchmark environment: Windows 11, 16-core CPU, .NET 11, simple 1KB response backend*
 
 ## Comparison with Caddy
 
@@ -247,9 +264,7 @@ Recent performance tests show Slickgate outperforming Caddy in throughput and me
 | Docker discovery | via plugin | built in (labels) |
 | Hot reload | ✅ | ✅ |
 | Runtime | single static binary | managed or **Native AOT** binary |
-| **Performance Scaling** | Degrades at high concurrency | Maintains throughput under load |
-| **Memory Efficiency** | High memory usage under load | Efficient memory management |
-| **Throughput** | ~5-29k req/s | ~27-44k req/s |
+| Measured performance | see [`bench/`](bench/README.md) | see [`bench/`](bench/README.md) |
 | Ecosystem | mature | early MVP |
 
 ## Roadmap
@@ -266,10 +281,6 @@ Recent performance tests show Slickgate outperforming Caddy in throughput and me
 Early MVP, built as a focused ~1.5–2 week project (AI-assisted). The public
 surface (`GatewayConfig`, the admin API, and label names) is still subject to
 change.
-
-**Recent Updates**: Build issues resolved, all projects now target .NET 11. 
-Performance benchmarks show Slickgate outperforming Caddy 2.11.7 in throughput 
-and memory efficiency, particularly under high concurrent loads.
 
 ## License
 
