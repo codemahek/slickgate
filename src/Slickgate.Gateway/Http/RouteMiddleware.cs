@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.StaticFiles;
 using Slickgate.Core.Configuration;
 using Slickgate.Core.Proxy;
+using Slickgate.Core.Security;
 
 namespace Slickgate.Gateway.Http;
 
@@ -84,36 +85,13 @@ public sealed class RouteMiddleware(RequestDelegate next)
         foreach (var candidate in users)
         {
             if (string.Equals(candidate.User, user, StringComparison.Ordinal) &&
-                VerifyPassword(password, candidate.PasswordHash))
+                PasswordVerifier.Verify(password, candidate.PasswordHash))
             {
                 return true;
             }
         }
 
         return false;
-    }
-
-    private static bool VerifyPassword(string password, string hash)
-    {
-        if (string.IsNullOrEmpty(hash))
-        {
-            return false;
-        }
-
-        // Caddy emits $2y$ bcrypt hashes; normalize to the equivalent $2a$ form.
-        if (hash.StartsWith("$2y$", StringComparison.Ordinal))
-        {
-            hash = "$2a$" + hash[4..];
-        }
-
-        try
-        {
-            return BCrypt.Net.BCrypt.Verify(password, hash);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private static async Task ServeStaticAsync(HttpContext context, string root)
