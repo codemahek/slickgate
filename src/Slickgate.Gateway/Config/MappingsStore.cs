@@ -13,7 +13,7 @@ public sealed class MappingsStore(
     GatewayHostOptions options,
     ILogger<MappingsStore> logger)
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     public string MappingsPath => Path.GetFullPath(options.MappingsPath);
 

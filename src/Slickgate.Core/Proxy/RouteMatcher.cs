@@ -20,16 +20,14 @@ public static class RouteMatcher
         {
             var route = routes[i];
             if (!Matches(route, host, path))
-            {
                 continue;
-            }
 
             var order = route.Order ?? i * 10;
-            if (order < bestOrder)
-            {
-                bestOrder = order;
-                best = route;
-            }
+            if (order >= bestOrder) 
+                continue;
+
+            bestOrder = order;
+            best = route;
         }
 
         return best;
@@ -83,14 +81,13 @@ public static class RouteMatcher
             return true;
         }
 
-        if (pattern.StartsWith("*.", StringComparison.Ordinal))
-        {
-            var suffix = pattern[1..]; // ".example.com"
-            return host.Length > suffix.Length
-                && host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
-        }
+        if (!pattern.StartsWith("*.", StringComparison.Ordinal))
+            return string.Equals(pattern, host, StringComparison.OrdinalIgnoreCase);
 
-        return string.Equals(pattern, host, StringComparison.OrdinalIgnoreCase);
+        var suffix = pattern[1..]; // ".example.com"
+        return host.Length > suffix.Length
+               && host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+
     }
 
     public static bool MatchesPath(RouteDefinition route, string path)
@@ -99,39 +96,28 @@ public static class RouteMatcher
         {
             var exact = NormalizePrefix(route.PathExact);
             if (!string.Equals(exact, NormalizePrefix(path), StringComparison.OrdinalIgnoreCase))
-            {
                 return false;
-            }
         }
 
-        if (route.PathPrefix is not null)
-        {
-            var prefix = NormalizePrefix(route.PathPrefix);
-            if (prefix != "/")
-            {
-                var normalizedPath = NormalizePrefix(path);
-                if (!string.Equals(normalizedPath, prefix, StringComparison.OrdinalIgnoreCase) &&
-                    !normalizedPath.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-            }
-        }
+        if (route.PathPrefix is null) 
+            return true;
 
-        return true;
+        var prefix = NormalizePrefix(route.PathPrefix);
+        if (prefix == "/") 
+            return true;
+
+        var normalizedPath = NormalizePrefix(path);
+        return string.Equals(normalizedPath, prefix, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizePrefix(string value)
     {
         if (string.IsNullOrEmpty(value))
-        {
             return "/";
-        }
 
-        if (!value.StartsWith('/'))
-        {
+        if (!value.StartsWith('/')) 
             value = "/" + value;
-        }
 
         return value.Length > 1 ? value.TrimEnd('/') : value;
     }
