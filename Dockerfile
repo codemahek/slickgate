@@ -14,6 +14,9 @@ ARG DOTNET_VERSION=11.0
 # Managed (JIT) build
 # ---------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION}-alpine AS build
+# runtime-async is on by default; build with --build-arg SlickgateRuntimeAsync=off
+# for a compiler-lowered baseline (used by the benchmark harness).
+ARG SlickgateRuntimeAsync=on
 WORKDIR /src
 COPY Directory.Build.props ./
 COPY src/Slickgate.Core/Slickgate.Core.csproj src/Slickgate.Core/
@@ -21,7 +24,8 @@ COPY src/Slickgate.Gateway/Slickgate.Gateway.csproj src/Slickgate.Gateway/
 RUN dotnet restore src/Slickgate.Gateway/Slickgate.Gateway.csproj
 COPY src/ src/
 RUN dotnet publish src/Slickgate.Gateway/Slickgate.Gateway.csproj \
-        -c Release --no-restore -o /app/publish /p:UseAppHost=false
+        -c Release --no-restore -o /app/publish /p:UseAppHost=false \
+        -p:SlickgateRuntimeAsync=${SlickgateRuntimeAsync}
 
 # ---------------------------------------------------------------------------
 # Native AOT build

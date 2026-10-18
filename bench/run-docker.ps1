@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Slickgate vs Caddy head-to-head benchmark (Linux containers via Docker Desktop / WSL2).
+    Slickgate vs Caddy vs HAProxy benchmark (Linux containers via Docker Desktop / WSL2).
 
 .DESCRIPTION
     The container counterpart to run.ps1. Every component runs in Docker so both
@@ -29,7 +29,12 @@ param(
     [int]$Duration = 10,
     [int]$Concurrency = 200,
     [int]$Warmup = 3,
-    [string[]]$Proxy = @('Slickgate (Docker JIT)', 'Slickgate (Docker AOT)', 'Caddy (Docker)'),
+    [string[]]$Proxy = @(
+        'Slickgate (runtime-async on)',
+        'Slickgate (runtime-async off)',
+        'Caddy (Docker)',
+        'HAProxy (Docker)'
+    ),
     [switch]$SkipBuild,
     [switch]$SkipDownload
 )
@@ -44,6 +49,7 @@ $loadgenName = 'bench-loadgen'
 $backendImage = 'slickgate-bench-backend:dev'
 $loadgenImage = 'slickgate-bench-loadgen:dev'
 $caddyImage = 'caddy:2.11.7'
+$haproxyImage = 'haproxy:alpine'
 $ohaVersion = 'v1.16.0'
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -173,17 +179,21 @@ if (-not (Test-Path $ohaBin)) {
 
 # --- images --------------------------------------------------------------
 if (-not $SkipBuild) {
-    Write-Host 'Building benchmark images (backend, loadgen, slickgate jit + aot) ...'
-    docker build -f bench/docker/backend.Dockerfile -t $backendImage .
+    Write-Host 'Building benchmark images (backend, loadgen, slickgate async on/off + aot) ...'
+    docker build -f (Join-Path $repo 'bench/docker/backend.Dockerfile') -t $backendImage $repo
     Assert-Ok 'backend image build'
-    docker build -f bench/docker/loadgen.Dockerfile -t $loadgenImage bench/.tools
+    docker build -f (Join-Path $repo 'bench/docker/loadgen.Dockerfile') -t $loadgenImage (Join-Path $repo 'bench/.tools')
     Assert-Ok 'loadgen image build'
-    docker build -t slickgate-bench:jit --target final .
-    Assert-Ok 'slickgate (jit) image build'
-    docker build -t slickgate-bench:aot --target aot .
+    docker build -t slickgate-bench:jit --target final $repo
+    Assert-Ok 'slickgate (runtime-async on) image build'
+    docker build -t slickgate-bench:noasync --target final --build-arg SlickgateRuntimeAsync=off $repo
+    Assert-Ok 'slickgate (runtime-async off) image build'
+    docker build -t slickgate-bench:aot --target aot $repo
     Assert-Ok 'slickgate (aot) image build'
     docker pull $caddyImage
     Assert-Ok 'caddy pull'
+    docker pull $haproxyImage
+    Assert-Ok 'haproxy pull'
 }
 
 # --- network + shared backend -------------------------------------------
@@ -196,22 +206,39 @@ docker run -d --name $backendName --network $network $backendImage | Out-Null
 Assert-Ok 'backend start'
 Wait-Url "http://${backendName}:8088/health" 'backend'
 
+$slickgateRun = @('--network', $network,
+    '-e', 'Logging__LogLevel__Default=Warning',
+    '-e', 'Logging__LogLevel__Microsoft=Warning',
+    '-v', "${repo}/bench/docker/slickgate.yaml:/etc/slickgate/gateway.yaml:ro")
+
 $defs = @{
-    'Slickgate (Docker JIT)' = @{
+    'Slickgate (runtime-async on)' = @{
         Image  = 'slickgate-bench:jit'
-        Run    = @('--network', $network, '-e', 'Logging__LogLevel__Default=Warning', '-e', 'Logging__LogLevel__Microsoft=Warning', '-v', "${repo}/bench/docker/slickgate.yaml:/etc/slickgate/gateway.yaml:ro")
+        Run    = $slickgateRun
+        Url    = "http://${proxyName}:80/"
+        Health = "http://${proxyName}:80/-/health"
+    }
+    'Slickgate (runtime-async off)' = @{
+        Image  = 'slickgate-bench:noasync'
+        Run    = $slickgateRun
         Url    = "http://${proxyName}:80/"
         Health = "http://${proxyName}:80/-/health"
     }
     'Slickgate (Docker AOT)' = @{
         Image  = 'slickgate-bench:aot'
-        Run    = @('--network', $network, '-e', 'Logging__LogLevel__Default=Warning', '-e', 'Logging__LogLevel__Microsoft=Warning', '-v', "${repo}/bench/docker/slickgate.yaml:/etc/slickgate/gateway.yaml:ro")
+        Run    = $slickgateRun
         Url    = "http://${proxyName}:80/"
         Health = "http://${proxyName}:80/-/health"
     }
     'Caddy (Docker)' = @{
         Image  = $caddyImage
         Run    = @('--network', $network, '-v', "${repo}/bench/docker/Caddyfile:/etc/caddy/Caddyfile:ro")
+        Url    = "http://${proxyName}:80/"
+        Health = "http://${proxyName}:80/"
+    }
+    'HAProxy (Docker)' = @{
+        Image  = $haproxyImage
+        Run    = @('--network', $network, '-v', "${repo}/bench/docker/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro")
         Url    = "http://${proxyName}:80/"
         Health = "http://${proxyName}:80/"
     }

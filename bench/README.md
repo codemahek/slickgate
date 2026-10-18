@@ -1,7 +1,9 @@
 # Slickgate benchmarks
 
-A head-to-head comparison of **Slickgate** against **Caddy 2.11.7** as a reverse
-proxy, measuring throughput, latency, and memory.
+A head-to-head comparison of **Slickgate** against **Caddy 2.11.7** and
+**HAProxy** as a reverse proxy, measuring throughput, latency, and memory.
+Slickgate is measured twice — with .NET 11's `runtime-async` feature **on**
+(default) and **off** — so the compiler-lowering speedup can be isolated.
 
 Two harnesses are provided:
 
@@ -22,9 +24,11 @@ per proxy under `results/` and `results-docker/`.
 - **Image/runtime size** — for the container harness.
 
 The backend (`bench/backend`) returns a fixed 1 KiB payload with no per-request
-allocation, so the numbers reflect *proxy* overhead only. Everything that costs
+allocations, so the numbers reflect *proxy* overhead only. Everything that costs
 work in Slickgate (ACME, Docker polling, telemetry) is disabled in
-`bench/slickgate.yaml`; Caddy runs with `admin off`, `auto_https off`.
+`bench/slickgate.yaml`; Caddy runs with `admin off`, `auto_https off`,
+`persist_config off`; HAProxy runs a single frontend/backend with no health
+checks or ACLs.
 
 ### Logging is silenced on purpose
 
@@ -48,24 +52,35 @@ directories are git-ignored.
 # Native Windows: Slickgate (JIT) vs Caddy
 ./bench/run.ps1 -Duration 20 -Concurrency 200 -Warmup 5
 
-# Linux containers: Slickgate (JIT + AOT) vs Caddy
+# Linux containers: Slickgate (runtime-async on/off) vs Caddy vs HAProxy
 ./bench/run-docker.ps1 -Duration 20 -Concurrency 200 -Warmup 5
 
 # A single proxy, no rebuild
 ./bench/run-docker.ps1 -SkipBuild -Proxy 'Caddy (Docker)' -Concurrency 400
+
+# Just the runtime-async A/B, longer samples
+./bench/run-docker.ps1 -SkipBuild -Duration 30 `
+    -Proxy @('Slickgate (runtime-async on)', 'Slickgate (runtime-async off)')
 ```
 
-`run-docker.ps1` builds three images from the repo: the backend
-(`bench/docker/backend.Dockerfile`), the load generator
-(`bench/docker/loadgen.Dockerfile`, built from `bench/.tools/`), and the two
-Slickgate flavors from the root `Dockerfile` (`--target final` and `--target aot`).
+Known `-Proxy` values: `Slickgate (runtime-async on)`,
+`Slickgate (runtime-async off)`, `Slickgate (Docker AOT)`, `Caddy (Docker)`,
+`HAProxy (Docker)`.
+
+`run-docker.ps1` builds the backend (`bench/docker/backend.Dockerfile`), the
+load generator (`bench/docker/loadgen.Dockerfile`, built from `bench/.tools/`),
+and the Slickgate flavors from the root `Dockerfile` (`--target final`, twice —
+once per `SlickgateRuntimeAsync` value — plus `--target aot`). Caddy and HAProxy
+are pulled and configured from `bench/docker/Caddyfile` and
+`bench/docker/haproxy.cfg`.
 
 ## Results
 
 Environment: Windows 11, 16 logical cores. Docker runs on Docker Desktop (WSL2)
-with a 16 vCPU / ~15.6 GiB VM. Load = 20 s at 200 concurrent connections,
-5 s warm-up, fixed 1 KiB responses. Windows figures are the median of 3 runs;
-container figures are from repeated runs of the same settings.
+with a 16 vCPU / ~15.6 GiB VM. Load = fixed 1 KiB responses, 5 s warm-up.
+Container figures below are medians of repeated runs (see each table); Windows
+figures are the median of 3 runs. Captured 2026-10-18 under
+`bench/results-docker/20261018-*`.
 
 ### Native Windows
 
@@ -76,33 +91,56 @@ container figures are from repeated runs of the same settings.
 
 ### Linux containers (Docker Desktop / WSL2)
 
-20 s @ 200 concurrent connections:
+6 runs × 20 s @ 200 concurrent connections, medians:
 
-| Proxy                  | req/s  | avg ms | p50 ms | p90 ms | p99 ms | idle   | peak   | image |
-| ---------------------- | ------ | ------ | ------ | ------ | ------ | ------ | ------ | ----- |
-| Slickgate (JIT)        | 40,323 |  4.93  |  4.64  |   7.20 |  10.43 |  30 M  | 110 M  | 199 M |
-| Slickgate (AOT)        | 36,208 |  5.48  |  5.18  |   7.98 |  11.51 |  29 M  | 108 M  | 387 M |
-| Caddy 2.11.7           |  4,962 | 40.01  | 12.58  |  59.97 | 523.36 |  14 M  | 134 M  |  93 M |
+| Proxy                        | req/s  | avg ms | p50 ms | p90 ms | p99 ms | idle   | peak   | cgroup | image |
+| ---------------------------- | ------ | ------ | ------ | ------ | ------ | ------ | ------ | ------ | ----- |
+| Slickgate (runtime-async on) | 38,208 |  5.21  |  4.83  |  7.76  | 11.90  | 32 M   | 108 M  | 118 M  | 199 M |
+| Slickgate (runtime-async off)| 36,356 |  5.48  |  5.07  |  8.23  | 12.57  | 31 M   | 111 M  | 115 M  | 199 M |
+| HAProxy (`haproxy:alpine`)   | 48,463 |  4.10  |  3.55  |  7.00  | 13.87  | 32 M   |  37 M  |  39 M  |  75 M |
+| Caddy 2.11.7                 |  4,913 | 37.35  | 12.38  | 60.65  | 459.41 | 14 M   | 148 M  | 150 M  |  93 M |
 
 For reference, the **backend alone** (no proxy) sustains **~159,000 req/s** at
-200 concurrency in the same VM, so both proxies — not the origin — are the
+200 concurrency in the same VM, so the proxies — not the origin — are the
 bottleneck.
 
-Concurrency sweep (15 s each, same environment):
+#### runtime-async A/B (same binary, one build flag)
 
-| Concurrency | Slickgate JIT | Slickgate AOT | Caddy 2.11.7 |
-| ----------- | ------------- | ------------- | ------------ |
-| 50          | 27,892        | 26,772        | 20,509       |
-| 200         | 38,551        | 36,956        | 6,880        |
-| 400         | 41,510        | 41,346        | 4,962        |
+4 paired runs × 30 s @ 200 connections, Slickgate only (no Caddy competing for
+CPU in the same VM):
+
+| Build                  | req/s  | avg ms | p99 ms |
+| ---------------------- | ------ | ------ | ------ |
+| `SlickgateRuntimeAsync=on`  (default) | 43,296 | 4.60 | 10.21 |
+| `SlickgateRuntimeAsync=off`          | 42,750 | 4.66 | 10.31 |
+
+Across all 10 paired samples (6 × 20 s + 4 × 30 s) the median delta is
+**+1.5 %** (mean +4.1 %, skewed by one bad `off` run). runtime-async is
+performance-neutral: it is free, not a large win.
+
+Concurrency sweep (15 s each; c=200 column is the median of 6 runs above):
+
+| Concurrency | Slickgate async on | Slickgate async off | HAProxy | Caddy 2.11.7 |
+| ----------- | ------------------ | ------------------- | ------- | ------------ |
+| 50          | 27,914             | 28,617              | 35,754  | 23,566       |
+| 200         | 38,208             | 36,356              | 48,463  | 4,913        |
+| 400         | 48,151             | 47,692              | 61,285  | 5,307        |
 
 ## Findings
 
-- **Slickgate scales with concurrency; Caddy degrades** in this particular
-  container environment. At 50 connections they are close (28k vs 21k), but by
-  200+ connections Caddy saturates 14+ vCPUs to serve ~5–7k req/s while
-  Slickgate serves ~40k on ~7 vCPUs. Pointing Caddy at the backend by IP instead
-  of Docker DNS only partly helped (6.9k → 10.1k), so this is not simply DNS.
+- **HAProxy is the fast, small baseline: ~48k req/s at 27 % of Slickgate's
+  memory.** It leads every run (48–61k req/s, 37–43 M peak, 75 M image) and
+  sits ~0.5 ms ahead of Slickgate on p50. That is the expected shape of the
+  result: an event-driven C proxy with no per-request object model versus a
+  managed runtime. Slickgate is within ~20 % of HAProxy on throughput while
+  costing ~3× the memory — respectable for a .NET gateway, but not a
+  contention-free win.
+
+- **Slickgate is 6–8× Caddy in this environment**, on throughput *and* p99
+  (12 ms vs 460 ms). At 50 connections they are close (28k vs 24k), but by
+  200+ connections Caddy collapses to ~5k req/s while Slickgate and HAProxy
+  keep climbing. Pointing Caddy at the backend by IP instead of Docker DNS
+  only partly helped historically (6.9k → 10.1k), so this is not simply DNS.
 
   **Caveat:** Caddy is normally one of the most efficient proxies on Linux bare
   metal, so this collapse is very likely an artifact of Go's runtime/network
@@ -110,22 +148,32 @@ Concurrency sweep (15 s each, same environment):
   Treat the container comparison as environment-specific and re-run on a native
   Linux host for authoritative numbers — the harness is portable.
 
-- **Native Windows is the fairer same-platform comparison**, and there Slickgate
-  is ~2.7× Caddy's throughput at a fraction of the memory (125 MB vs 727 MB
-  private).
+- **`runtime-async` is free, not transformative: median +1.5 %** across 10
+  paired samples (max observed +22 % on one noisy sample, one sample −2 %).
+  Turn it on — it is the default — but do not expect it to change your
+  benchmarks. The toggle (`-p:SlickgateRuntimeAsync=off`, or
+  `--build-arg` in the Dockerfile) exists so the claim stays honest and
+  reproducible.
+
+- **Native Windows is the fairer same-platform comparison** (see above), and
+  there Slickgate is ~2.7× Caddy's throughput at a fraction of the memory
+  (125 MB vs 727 MB private).
 
 - **Default request logging is a real bottleneck.** Slickgate's per-request
   `Information` logging capped it at ~600 req/s on a hidden Windows console.
   Operators should raise the log level (e.g. `Logging__LogLevel__Default=Warning`)
-  in production until a configurable log level lands.
+  in production until a configurable log level lands. Both harnesses set it for
+  the containers/processes they start, and Caddy/HAProxy have no per-request
+  access log by default, so this levels the field.
 
-- **Native AOT** boots instantly and runs essentially neck-and-neck with JIT
-  (~37–41k vs ~39–42k req/s here) at a similar memory footprint, at the cost of a
-  much larger image (387 M vs 199 M) because the AOT toolchain output is a fully
-  self-contained native binary.
+- **Native AOT boots instantly and runs essentially neck-and-neck with JIT**
+  (~37–41k vs ~39–42k req/s in earlier runs) at a similar memory footprint, at
+  the cost of a much larger image (387 M vs 199 M). It is still selectable with
+  `-Proxy 'Slickgate (Docker AOT)'`.
 
-- **Idle memory** favours Caddy (~14 M vs ~30 M) — expected for a small Go
-  binary — but under load Slickgate stays lower in these runs.
+- **Idle memory favours Caddy (~14 M vs ~32 M)** — expected for a small Go
+  binary. HAProxy also idles at ~32 M but stays at ~37 M under load where
+  Slickgate climbs to ~108–111 M.
 
 ## Reproducing on Linux bare metal
 

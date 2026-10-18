@@ -2,7 +2,9 @@
 
   <PropertyGroup>
     <RootNamespace>Slickgate.Core</RootNamespace>
-    <Features>$(Features);runtime-async=on</Features>
+    <!-- .NET 11 "runtime async": JIT lowers async/await instead of the compiler.
+         Opt out with -p:SlickgateRuntimeAsync=off (used by the benchmark harness). -->
+    <Features Condition="'$(SlickgateRuntimeAsync)' != 'off'">$(Features);runtime-async=on</Features>
   </PropertyGroup>
 
   <ItemGroup>
