@@ -4,7 +4,7 @@ namespace Slickgate.Gateway.Config;
 /// Watches the YAML config file and the mappings overlay, hot-applying changes
 /// (debounced), like <c>caddy reload</c> without needing a signal or restart.
 /// </summary>
-public sealed class ConfigFileWatcherService(
+public sealed partial class ConfigFileWatcherService(
     ConfigReloader reloader,
     ILogger<ConfigFileWatcherService> logger) : BackgroundService
 {
@@ -32,7 +32,7 @@ public sealed class ConfigFileWatcherService(
             if (watcher is not null)
             {
                 watchers.Add(watcher);
-                logger.LogInformation("Watching {Path} for changes.", file);
+                LogWatching(logger, file);
             }
         }
 
@@ -81,7 +81,7 @@ public sealed class ConfigFileWatcherService(
 
         if (!Directory.Exists(directory))
         {
-            logger.LogWarning("Directory {Dir} does not exist; not watching {File}.", directory, fileName);
+            LogDirMissing(logger, directory, fileName);
             return null;
         }
 
@@ -98,4 +98,10 @@ public sealed class ConfigFileWatcherService(
         watcher.EnableRaisingEvents = true;
         return watcher;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Watching {Path} for changes.")]
+    private static partial void LogWatching(ILogger logger, string path);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Directory {Dir} does not exist; not watching {File}.")]
+    private static partial void LogDirMissing(ILogger logger, string dir, string file);
 }

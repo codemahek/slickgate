@@ -8,7 +8,7 @@ namespace Slickgate.Gateway.Config;
 /// Saves are atomic (temp file + rename) and applied to the runtime immediately;
 /// the file watcher also picks them up, which is harmless and idempotent.
 /// </summary>
-public sealed class MappingsStore(
+public sealed partial class MappingsStore(
     GatewayRuntime runtime,
     GatewayHostOptions options,
     ILogger<MappingsStore> logger)
@@ -43,8 +43,7 @@ public sealed class MappingsStore(
         catch (Exception ex)
         {
             error = ex.Message;
-            logger.LogError(ex, "Failed to load mappings from {Path}; keeping previous mappings.",
-                MappingsPath);
+            LogMappingsLoadFailed(logger, MappingsPath, ex);
             return false;
         }
     }
@@ -104,6 +103,12 @@ public sealed class MappingsStore(
 
         runtime.SetMappingRoutes(routes);
 
-        logger.LogInformation("Mappings saved to {Path} ({Count} route(s)).", path, routes.Count);
+        LogMappingsSaved(logger, path, routes.Count);
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to load mappings from {Path}; keeping previous mappings.")]
+    private static partial void LogMappingsLoadFailed(ILogger logger, string path, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Mappings saved to {Path} ({Count} route(s)).")]
+    private static partial void LogMappingsSaved(ILogger logger, string path, int count);
 }

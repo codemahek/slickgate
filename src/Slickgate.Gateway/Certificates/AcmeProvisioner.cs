@@ -12,7 +12,7 @@ namespace Slickgate.Gateway.Certificates;
 /// valid certificate is provisioned in the background, then hot-loaded by
 /// <see cref="CertificateManager"/>.
 /// </summary>
-public sealed class AcmeProvisioner(
+public sealed partial class AcmeProvisioner(
     GatewayRuntime runtime,
     CertificateManager certificates,
     AcmeChallengeStore challenges,
@@ -62,7 +62,7 @@ public sealed class AcmeProvisioner(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "ACME provisioning pass failed.");
+            LogProvisioningPassFailed(logger, ex);
         }
         finally
         {
@@ -81,10 +81,7 @@ public sealed class AcmeProvisioner(
 
         if (config.Server.HttpPort != 80)
         {
-            logger.LogWarning(
-                "acme.enabled is true but server.http_port is {Port}; HTTP-01 challenges " +
-                "require port 80 to be reachable from the internet.",
-                config.Server.HttpPort);
+            LogHttpPortWarning(logger, config.Server.HttpPort);
         }
 
         var hosts = config.Routes
@@ -110,8 +107,7 @@ public sealed class AcmeProvisioner(
         await _orderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            logger.LogInformation("Requesting ACME certificate for {Host} from {Directory}.",
-                host, acme.DirectoryUrl);
+            LogRequestingCertificate(logger, host, acme.DirectoryUrl);
 
             var accountKey = LoadOrCreateAccountKey(acme);
             var context = new AcmeContext(new Uri(acme.DirectoryUrl), accountKey);
@@ -133,11 +129,11 @@ public sealed class AcmeProvisioner(
             await File.WriteAllTextAsync(keyPath, certKey.ToPem(), ct).ConfigureAwait(false);
 
             certificates.ReloadAcme(host);
-            logger.LogInformation("ACME certificate for {Host} installed at {Path}.", host, certPath);
+            LogCertificateInstalled(logger, host, certPath);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "ACME provisioning failed for {Host}; keeping the self-signed fallback.", host);
+            LogProvisioningFailed(logger, host, ex);
         }
         finally
         {
@@ -195,4 +191,21 @@ public sealed class AcmeProvisioner(
         File.WriteAllText(path, key.ToPem());
         return key;
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "ACME provisioning pass failed.")]
+    private static partial void LogProvisioningPassFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "acme.enabled is true but server.http_port is {Port}; HTTP-01 challenges require port 80 to be reachable from the internet.")]
+    private static partial void LogHttpPortWarning(ILogger logger, int port);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Requesting ACME certificate for {Host} from {Directory}.")]
+    private static partial void LogRequestingCertificate(ILogger logger, string host, string directory);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "ACME certificate for {Host} installed at {Path}.")]
+    private static partial void LogCertificateInstalled(ILogger logger, string host, string path);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "ACME provisioning failed for {Host}; keeping the self-signed fallback.")]
+    private static partial void LogProvisioningFailed(ILogger logger, string host, Exception exception);
 }

@@ -7,7 +7,7 @@ namespace Slickgate.Gateway.Config;
 /// publishes them to the runtime, keeping the previous configuration on error.
 /// Shared by the file watcher and the admin <c>POST /-/reload</c> endpoint.
 /// </summary>
-public sealed class ConfigReloader(
+public sealed partial class ConfigReloader(
     GatewayRuntime runtime,
     GatewayHostOptions options,
     MappingsStore mappings,
@@ -27,14 +27,12 @@ public sealed class ConfigReloader(
         catch (Exception ex)
         {
             error = ex.Message;
-            logger.LogError(ex, "Failed to load {Path}; keeping the previous configuration.", ConfigPath);
+            LogLoadFailed(logger, ConfigPath, ex);
             return false;
         }
 
         runtime.SetFileConfig(config);
-        logger.LogInformation(
-            "Configuration loaded from {Path}: {RouteCount} file route(s).",
-            ConfigPath, config.Routes.Count);
+        LogConfigLoaded(logger, ConfigPath, config.Routes.Count);
 
         // Mappings are secondary: a bad overlay is reported but does not fail the reload.
         if (!mappings.TryLoad(out var mappingsError))
@@ -46,4 +44,10 @@ public sealed class ConfigReloader(
         error = null;
         return true;
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to load {Path}; keeping the previous configuration.")]
+    private static partial void LogLoadFailed(ILogger logger, string path, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Configuration loaded from {Path}: {RouteCount} file route(s).")]
+    private static partial void LogConfigLoaded(ILogger logger, string path, int routeCount);
 }

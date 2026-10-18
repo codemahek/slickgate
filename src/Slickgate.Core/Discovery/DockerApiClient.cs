@@ -45,8 +45,8 @@ public sealed class DockerApiClient : IDisposable
         using var response = await _http.GetAsync("/containers/json", ct).ConfigureAwait(false);
         await EnsureSuccess(response, ct).ConfigureAwait(false);
 
-        var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-        return JsonSerializer.Deserialize(bytes, DockerJsonContext.Default.ContainerListItemArray) ?? [];
+        using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync(stream, DockerJsonContext.Default.ContainerListItemArray, ct).ConfigureAwait(false) ?? [];
     }
 
     public async Task<ContainerInspect?> InspectAsync(string containerId, CancellationToken ct)
@@ -61,8 +61,8 @@ public sealed class DockerApiClient : IDisposable
 
         await EnsureSuccess(response, ct).ConfigureAwait(false);
 
-        var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-        return JsonSerializer.Deserialize(bytes, DockerJsonContext.Default.ContainerInspect);
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync(stream, DockerJsonContext.Default.ContainerInspect, ct);
     }
 
     private static async Task EnsureSuccess(HttpResponseMessage response, CancellationToken ct)

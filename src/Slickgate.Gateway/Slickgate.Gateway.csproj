@@ -21,6 +21,7 @@
 
   <PropertyGroup Condition="'$(SlickgateAot)' == 'true'">
     <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
+    <Features>$(Features);runtime-async=on</Features>
   </PropertyGroup>
 
   <ItemGroup>

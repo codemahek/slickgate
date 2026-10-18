@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <RootNamespace>Slickgate.Core</RootNamespace>
+    <Features>$(Features);runtime-async=on</Features>
   </PropertyGroup>
 
   <ItemGroup>

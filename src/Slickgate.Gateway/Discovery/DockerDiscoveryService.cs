@@ -7,7 +7,7 @@ namespace Slickgate.Gateway.Discovery;
 /// Polls the Docker Engine API for running containers carrying <c>slickgate.*</c>
 /// labels and publishes the resulting routes (hot-reloaded by the runtime).
 /// </summary>
-public sealed class DockerDiscoveryService(
+public sealed partial class DockerDiscoveryService(
     GatewayRuntime runtime,
     ILogger<DockerDiscoveryService> logger) : BackgroundService
 {
@@ -32,7 +32,7 @@ public sealed class DockerDiscoveryService(
                         client = null;
                         clientEndpoint = null;
                         runtime.SetDockerRoutes([]);
-                        logger.LogInformation("Docker discovery disabled.");
+                        LogDockerDisabled(logger);
                     }
 
                     await DelayAsync(DisabledPoll, stoppingToken);
@@ -46,12 +46,11 @@ public sealed class DockerDiscoveryService(
                     {
                         client = new DockerApiClient(docker.Endpoint);
                         clientEndpoint = docker.Endpoint;
-                        logger.LogInformation("Docker discovery watching {Endpoint} (network {Network}).",
-                            docker.Endpoint, docker.Network);
+                        LogWatching(logger, docker.Endpoint, docker.Network);
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Cannot connect to Docker endpoint {Endpoint}.", docker.Endpoint);
+                        LogConnectFailed(logger, docker.Endpoint, ex);
                         client = null;
                         clientEndpoint = null;
                         await DelayAsync(docker.PollInterval, stoppingToken);
@@ -70,7 +69,7 @@ public sealed class DockerDiscoveryService(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Docker discovery poll failed; keeping previous routes.");
+                    LogPollFailed(logger, ex);
                 }
 
                 await DelayAsync(docker.PollInterval, stoppingToken);
@@ -128,7 +127,7 @@ public sealed class DockerDiscoveryService(
             }
             catch (SlickgateConfigException ex)
             {
-                logger.LogWarning("Skipping container {Name}: {Error}", name, ex.Message);
+                LogContainerSkipped(logger, name, ex.Message);
             }
         }
 
@@ -151,4 +150,19 @@ public sealed class DockerDiscoveryService(
 
     private static Task DelayAsync(TimeSpan delay, CancellationToken ct) =>
         Task.Delay(delay == TimeSpan.Zero ? TimeSpan.FromSeconds(1) : delay, ct);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Docker discovery disabled.")]
+    private static partial void LogDockerDisabled(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Docker discovery watching {Endpoint} (network {Network}).")]
+    private static partial void LogWatching(ILogger logger, string endpoint, string network);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Cannot connect to Docker endpoint {Endpoint}.")]
+    private static partial void LogConnectFailed(ILogger logger, string endpoint, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Docker discovery poll failed; keeping previous routes.")]
+    private static partial void LogPollFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Skipping container {Name}: {Error}")]
+    private static partial void LogContainerSkipped(ILogger logger, string name, string error);
 }
