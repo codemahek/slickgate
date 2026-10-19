@@ -82,16 +82,8 @@ public sealed class RouteMiddleware(RequestDelegate next)
         var user = decoded[..separator];
         var password = decoded[(separator + 1)..];
 
-        foreach (var candidate in users)
-        {
-            if (string.Equals(candidate.User, user, StringComparison.Ordinal) &&
-                PasswordVerifier.Verify(password, candidate.PasswordHash))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        var candidate = users.FirstOrDefault(u => string.Equals(u.User, user, StringComparison.Ordinal));
+        return candidate is not null && PasswordVerifier.Verify(password, candidate.PasswordHash);
     }
 
     private static async Task ServeStaticAsync(HttpContext context, string root)
