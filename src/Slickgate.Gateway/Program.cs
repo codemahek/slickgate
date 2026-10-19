@@ -41,6 +41,11 @@ builder.Logging.AddSimpleConsole(console =>
     console.UseUtcTimestamp = true;
 });
 
+if (builder.Configuration["Logging:LogLevel:Default"] is null)
+{
+    builder.Logging.SetMinimumLevel(LogLevel.Warning);
+}
+
 builder.Services.AddSingleton(hostOptions);
 builder.Services.AddSingleton(runtime);
 builder.Services.AddSingleton<IProxyConfigProvider>(proxyProvider);

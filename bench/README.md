@@ -32,13 +32,15 @@ checks or ACLs.
 
 ### Logging is silenced on purpose
 
-Slickgate logs every request at `Information` by default. Writing those lines to
-a real console is an I/O bottleneck: on Windows it throttled the gateway to
-~600 req/s. Both harnesses set `Logging__LogLevel__Default=Warning` for the
-processes/containers they start so the result measures proxy work, not console
-I/O. (Caddy has no per-request access log by default, so this levels the field.)
+Per-request `Information` logging is a real I/O bottleneck (on Windows it
+throttled the gateway to ~600 req/s), so the gateway now applies a `Warning`
+default when no log level is configured. Both harnesses still set
+`Logging__LogLevel__Default=Warning` explicitly for the processes/containers
+they start — belt and braces, and it keeps the field level with Caddy, which
+has no per-request access log by default.
 
-> Heads-up: this is worth knowing in production too — see *Findings* below.
+Explicit configuration always wins: `Logging__LogLevel__Default=Information`
+restores per-request logs (measured: 1.2 M log lines in 8 s at 19.8k req/s).
 
 ## Running
 
@@ -159,12 +161,14 @@ Concurrency sweep (15 s each; c=200 column is the median of 6 runs above):
   there Slickgate is ~2.7× Caddy's throughput at a fraction of the memory
   (125 MB vs 727 MB private).
 
-- **Default request logging is a real bottleneck.** Slickgate's per-request
-  `Information` logging capped it at ~600 req/s on a hidden Windows console.
-  Operators should raise the log level (e.g. `Logging__LogLevel__Default=Warning`)
-  in production until a configurable log level lands. Both harnesses set it for
-  the containers/processes they start, and Caddy/HAProxy have no per-request
-  access log by default, so this levels the field.
+- **Default request logging was a real bottleneck — now fixed in code.**
+  Without any configuration the gateway logged every request at `Information`
+  to the console: measured in Docker at **14.7k–24.6k req/s** (p99 27–50 ms)
+  against ~41k req/s with `Warning`. `Program.cs` now sets a `Warning`
+  minimum only when `Logging:LogLevel:Default` is unset, so explicit
+  configuration still wins (verified: `-e Logging__LogLevel__Default=Information`
+  emits per-request lines again, 1.2 M in 8 s). Out of the box a 15 s run now
+  writes 3 log lines instead of ~1 M.
 
 - **Native AOT boots instantly and runs essentially neck-and-neck with JIT**
   (~37–41k vs ~39–42k req/s in earlier runs) at a similar memory footprint, at
@@ -174,6 +178,33 @@ Concurrency sweep (15 s each; c=200 column is the median of 6 runs above):
 - **Idle memory favours Caddy (~14 M vs ~32 M)** — expected for a small Go
   binary. HAProxy also idles at ~32 M but stays at ~37 M under load where
   Slickgate climbs to ~108–111 M.
+
+- **What the counters say under load.** A `dotnet-counters` / `dotnet-gcdump` /
+  `dotnet-trace` session at 200 connections (artifacts in
+  `bench/results-docker/20261018-195137-diag`) shows **~8.8 CPU-seconds per
+  second** for ~21k req/s (≈ 410 µs of CPU per proxied request, 1.9 of those in
+  syscalls) and **~7.4 KB allocated per request** (158 MB/s → a gen0 collection
+  every ~0.4 s, 3.1 % of wall time in GC pauses), ~43 lock contentions/s and
+  ~154 exceptions/s (mostly `TaskCanceled` from client disconnects, with 100 %
+  request success). The diagnostics session itself depresses throughput
+  (21k vs 39k clean), so treat these as structural ratios, not benchmark
+  numbers.
+
+- **Server GC reservation — not live objects — drives peak memory.** The same
+  session's `dotnet-gcdump` shows only **~10.5 M of live objects** (gen0 1 M +
+  gen1 6 M + gen2 8 M) against a 105–115 M peak: the rest is Server GC heap
+  reservation on a 16-vCPU VM. 3 runs each, same harness settings:
+
+  | GC mode                          | median req/s | peak  | idle |
+  | -------------------------------- | -----------: | ----: | ---: |
+  | Server GC (default)              |       41,093 | 105 M | 32 M |
+  | Workstation GC (`DOTNET_gcServer=0`) |    35,406 |  65 M | 29 M |
+
+  Workstation GC trades ~14 % of peak throughput for **41 % less memory** and
+  still clears a home gateway's load by an order of magnitude — the right
+  trade where memory is tight (set `DOTNET_gcServer=0` in the container
+  environment). `DOTNET_GCHeapCount=2` and `DOTNET_GCConserveMemory=9` moved
+  neither number meaningfully.
 
 ## Reproducing on Linux bare metal
 

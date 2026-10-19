@@ -20,8 +20,8 @@ public sealed partial class AcmeProvisioner(
 {
     private static readonly TimeSpan RenewBefore = TimeSpan.FromDays(30);
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
+    private const int MaxConcurrentOrders = 3;
 
-    private readonly SemaphoreSlim _orderLock = new(1, 1);
     private int _provisioning;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -88,28 +88,42 @@ public sealed partial class AcmeProvisioner(
             .Where(static r => r.Tls == TlsMode.Auto)
             .SelectMany(static r => r.Hosts)
             .Where(static h => !string.IsNullOrWhiteSpace(h))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(host => !certificates.HasValidAcme(host, RenewBefore))
+            .ToList();
 
+        if (hosts.Count == 0)
+        {
+            return;
+        }
+
+        // One account key per pass (passes never overlap), then provision hosts
+        // with bounded parallelism: each order is several round trips of waiting
+        // (issue -> challenge poll -> finalize), so serializing them multiplies
+        // cold-start time by the number of hosts.
+        var accountKey = LoadOrCreateAccountKey(acme);
+        using var gate = new SemaphoreSlim(MaxConcurrentOrders);
+        var tasks = new List<Task>(hosts.Count);
         foreach (var host in hosts)
         {
-            ct.ThrowIfCancellationRequested();
-            if (certificates.HasValidAcme(host, RenewBefore))
-            {
-                continue;
-            }
-
-            await ProvisionHostAsync(host, acme, ct).ConfigureAwait(false);
+            tasks.Add(ProvisionHostAsync(host, acme, accountKey, gate, ct));
         }
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 
-    private async Task ProvisionHostAsync(string host, AcmeConfig acme, CancellationToken ct)
+    private async Task ProvisionHostAsync(
+        string host,
+        AcmeConfig acme,
+        IKey accountKey,
+        SemaphoreSlim gate,
+        CancellationToken ct)
     {
-        await _orderLock.WaitAsync(ct).ConfigureAwait(false);
+        await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             LogRequestingCertificate(logger, host, acme.DirectoryUrl);
 
-            var accountKey = LoadOrCreateAccountKey(acme);
             var context = new AcmeContext(new Uri(acme.DirectoryUrl), accountKey);
             await context.NewAccount(acme.Email, termsOfServiceAgreed: true).ConfigureAwait(false);
 
@@ -131,13 +145,17 @@ public sealed partial class AcmeProvisioner(
             certificates.ReloadAcme(host);
             LogCertificateInstalled(logger, host, certPath);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             LogProvisioningFailed(logger, host, ex);
         }
         finally
         {
-            _orderLock.Release();
+            gate.Release();
         }
     }
 

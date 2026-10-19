@@ -45,7 +45,7 @@ public sealed class DockerApiClient : IDisposable
         using var response = await _http.GetAsync("/containers/json", ct).ConfigureAwait(false);
         await EnsureSuccess(response, ct).ConfigureAwait(false);
 
-        using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync(stream, DockerJsonContext.Default.ContainerListItemArray, ct).ConfigureAwait(false) ?? [];
     }
 

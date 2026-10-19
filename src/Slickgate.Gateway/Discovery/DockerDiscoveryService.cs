@@ -81,6 +81,8 @@ public sealed partial class DockerDiscoveryService(
         }
     }
 
+    private const int MaxConcurrentInspects = 8;
+
     private async Task<IReadOnlyList<RouteDefinition>> DiscoverRoutesAsync(
         DockerApiClient client,
         DockerConfig config,
@@ -88,23 +90,40 @@ public sealed partial class DockerDiscoveryService(
     {
         var containers = await client.ListRunningContainersAsync(ct);
 
-        var routes = new List<RouteDefinition>();
-        foreach (var container in containers)
+        var candidates = containers
+            .Where(c => c.Labels is not null && DockerLabelParser.IsEnabled(c.Labels, config.LabelPrefix))
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        // Inspect in parallel (bounded) but keep results in container order:
+        // Task.WhenAll preserves the task array's order, so route priority stays
+        // deterministic regardless of which inspect finishes first.
+        using var gate = new SemaphoreSlim(MaxConcurrentInspects);
+        var inspections = new Task<ContainerInspect?>[candidates.Count];
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            inspections[i] = InspectThrottledAsync(client, candidates[i].Id, gate, ct);
+        }
+
+        var results = await Task.WhenAll(inspections);
+
+        var routes = new List<RouteDefinition>(results.Length);
+        for (var i = 0; i < results.Length; i++)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (container.Labels is null || !DockerLabelParser.IsEnabled(container.Labels, config.LabelPrefix))
-            {
-                continue;
-            }
-
-            var inspect = await client.InspectAsync(container.Id, ct);
+            var container = candidates[i];
+            var inspect = results[i];
             if (inspect?.State is { Running: false })
             {
                 continue;
             }
 
-            var labels = inspect?.Config?.Labels ?? container.Labels;
+            var labels = inspect?.Config?.Labels ?? container.Labels!;
             var name = (inspect?.Name is { Length: > 0 } n ? n : container.Names.FirstOrDefault())
                 ?.TrimStart('/') ?? container.Id[..12];
 
@@ -132,6 +151,23 @@ public sealed partial class DockerDiscoveryService(
         }
 
         return routes;
+    }
+
+    private static async Task<ContainerInspect?> InspectThrottledAsync(
+        DockerApiClient client,
+        string containerId,
+        SemaphoreSlim gate,
+        CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await client.InspectAsync(containerId, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private static int GetPort(IReadOnlyDictionary<string, string> labels, string labelPrefix)
