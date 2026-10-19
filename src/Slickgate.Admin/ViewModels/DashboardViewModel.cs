@@ -43,8 +43,11 @@ public partial class DashboardViewModel : ReactiveViewModelBase
         IsLoading = true;
         try
         {
-            Health = await _api.GetHealthAsync();
-            Config = await _api.GetConfigAsync();
+            var healthTask = _api.GetHealthAsync();
+            var configTask = _api.GetConfigAsync();
+            await Task.WhenAll(healthTask, configTask);
+            Health = await healthTask;
+            Config = await configTask;
         }
         catch (Exception ex)
         {
