@@ -44,7 +44,6 @@ public static class YamlConfigLoader
             Server = ParseServer(Map(map, "server")),
             Admin = ParseAdmin(Map(map, "admin")),
             Acme = ParseAcme(Map(map, "acme")),
-            Docker = ParseDocker(Map(map, "docker")),
             Telemetry = ParseTelemetry(Map(map, "telemetry")),
             Tls = ParseTlsSection(Map(map, "tls")),
             Routes = ParseRoutes(Seq(map, "routes")),
@@ -64,34 +63,6 @@ public static class YamlConfigLoader
 
         return config;
     }
-
-    /// <summary>
-    /// Loads a routes-only overlay document (used for admin-managed mappings). The
-    /// document must be a mapping with a top-level <c>routes</c> sequence.
-    /// </summary>
-    public static IReadOnlyList<RouteDefinition> LoadRouteList(string yaml)
-    {
-        var root = ParseDocument(yaml);
-        if (root is null)
-        {
-            return [];
-        }
-
-        var routes = root switch
-        {
-            YamlMappingNode map => ParseRoutes(Seq(map, "routes")),
-            YamlSequenceNode seq => ParseRoutes(seq),
-            _ => throw new SlickgateConfigException(
-                "Mappings document must be a mapping with a 'routes' list."),
-        };
-
-        ValidateRoutes(routes);
-        return routes;
-    }
-
-    /// <summary>Wraps a list of routes as a standalone overlay document.</summary>
-    public static string WriteRouteList(IReadOnlyList<RouteDefinition> routes) =>
-        RouteYamlWriter.Write(routes);
 
     private static YamlNode? ParseDocument(string yaml)
     {
@@ -177,17 +148,6 @@ public static class YamlConfigLoader
             DirectoryUrl = String(map, "directory_url") ??
                            "https://acme-v02.api.letsencrypt.org/directory",
             StorageDir = String(map, "storage_dir") ?? "./certs",
-        };
-
-    private static DockerConfig ParseDocker(YamlMappingNode? map) => map is null
-        ? new DockerConfig()
-        : new DockerConfig
-        {
-            Enabled = Bool(map, "enabled", false),
-            Endpoint = String(map, "endpoint") ?? "unix:///var/run/docker.sock",
-            Network = String(map, "network") ?? "slickgate",
-            LabelPrefix = String(map, "label_prefix") ?? "slickgate",
-            PollInterval = Duration(map, "poll_interval", TimeSpan.FromSeconds(10)),
         };
 
     private static TlsConfig ParseTlsSection(YamlMappingNode? map) => map is null

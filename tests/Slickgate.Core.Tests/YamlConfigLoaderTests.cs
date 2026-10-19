@@ -21,6 +21,8 @@ public class YamlConfigLoaderTests
           directory_url: https://acme-staging-v02.api.letsencrypt.org/directory
           storage_dir: ./certs
 
+        # Legacy section: Docker discovery was removed; unknown keys are ignored
+        # so old config files keep loading unchanged.
         docker:
           enabled: true
           endpoint: unix:///var/run/docker.sock
@@ -73,10 +75,6 @@ public class YamlConfigLoaderTests
         Assert.True(config.Acme.Enabled);
         Assert.Equal("admin@example.com", config.Acme.Email);
         Assert.Equal("./certs", config.Acme.StorageDir);
-
-        Assert.True(config.Docker.Enabled);
-        Assert.Equal("unix:///var/run/docker.sock", config.Docker.Endpoint);
-        Assert.Equal(TimeSpan.FromSeconds(10), config.Docker.PollInterval);
 
         Assert.Equal("http://localhost:4317", config.Telemetry.OtlpEndpoint);
 

@@ -16,9 +16,6 @@ admin:
 acme:
   enabled: false
 
-docker:
-  enabled: false
-
 telemetry:
   otlp_endpoint: null
 

@@ -5,7 +5,7 @@ using Slickgate.Admin.Services;
 
 namespace Slickgate.Admin.ViewModels;
 
-/// <summary>Effective routes as the gateway sees them (file + mappings + Docker).</summary>
+/// <summary>Effective routes as the gateway sees them (loaded from the config file).</summary>
 public partial class RoutesViewModel : ReactiveViewModelBase
 {
     private readonly GatewayAdminClient _api;

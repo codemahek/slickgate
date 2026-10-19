@@ -8,7 +8,6 @@ public sealed record HealthResponse(
 
 public sealed record RouteSummary(
     string Id,
-    string Source,
     List<string> Hosts,
     string? PathPrefix,
     string? PathExact,
@@ -28,8 +27,6 @@ public sealed record AdminView(bool Enabled, string? Token, List<string> CorsOri
 
 public sealed record AcmeView(bool Enabled, string Email, string DirectoryUrl, string StorageDir);
 
-public sealed record DockerView(bool Enabled, string Endpoint, string Network, string LabelPrefix, string PollInterval);
-
 public sealed record TelemetryView(string? OtlpEndpoint);
 
 public sealed record ConfigResponse(
@@ -38,43 +35,10 @@ public sealed record ConfigResponse(
     ServerView Server,
     AdminView Admin,
     AcmeView Acme,
-    DockerView Docker,
     TelemetryView Telemetry);
 
-public sealed record DockerPortView(int PrivatePort, int? PublicPort, string Type);
+public sealed record RawConfigResponse(string Path, string Yaml);
 
-public sealed record HealthCheckMapping(string? Path, string? Interval, string? Timeout);
+public sealed record RawConfigRequest(string Yaml);
 
-public sealed record RouteMapping(
-    string? Id,
-    List<string>? Hosts,
-    string? PathPrefix,
-    string? PathExact,
-    List<string>? Upstreams,
-    string? StripPrefix,
-    string? Tls,
-    Dictionary<string, string>? RequestHeadersSet,
-    Dictionary<string, string>? ResponseHeadersSet,
-    HealthCheckMapping? HealthCheck,
-    int? Order);
-
-public sealed record ContainerView(
-    string Id,
-    string Name,
-    string Image,
-    string State,
-    List<DockerPortView> Ports,
-    bool Enabled,
-    string? RouteId,
-    Dictionary<string, string> Labels,
-    RouteMapping Suggested);
-
-public sealed record ContainersResponse(
-    bool DockerEnabled,
-    string? Error,
-    int Count,
-    List<ContainerView> Containers);
-
-public sealed record MappingsResponse(int Count, List<RouteMapping> Mappings);
-
-public sealed record MappingResponse(bool Success, string? Error, RouteMapping? Mapping);
+public sealed record ConfigActionResponse(bool Success, string? Error);

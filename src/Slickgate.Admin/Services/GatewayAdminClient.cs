@@ -25,38 +25,51 @@ public sealed class GatewayAdminClient(HttpClient http, GatewaySettings settings
     public Task<ConfigResponse> GetConfigAsync(CancellationToken ct = default) =>
         GetAsync("/-/config", AdminJson.Default.ConfigResponse, ct);
 
+    public Task<RawConfigResponse> GetRawConfigAsync(CancellationToken ct = default) =>
+        GetAsync("/-/config/raw", AdminJson.Default.RawConfigResponse, ct);
+
+    public Task<ConfigActionResponse> ValidateConfigAsync(string yaml, CancellationToken ct = default)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, BuildUri("/-/config/validate"))
+        {
+            Content = JsonContent.Create(new RawConfigRequest(yaml), AdminJson.Default.RawConfigRequest),
+        };
+        return SendActionAsync(request, ct);
+    }
+
+    public Task<ConfigActionResponse> SaveConfigAsync(string yaml, CancellationToken ct = default)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, BuildUri("/-/config/raw"))
+        {
+            Content = JsonContent.Create(new RawConfigRequest(yaml), AdminJson.Default.RawConfigRequest),
+        };
+        return SendActionAsync(request, ct);
+    }
+
     public Task<ReloadResponse> ReloadAsync(CancellationToken ct = default)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, BuildUri("/-/reload"));
         return SendAsync(request, AdminJson.Default.ReloadResponse, ct);
     }
 
-    public Task<ContainersResponse> GetContainersAsync(CancellationToken ct = default) =>
-        GetAsync("/-/docker/containers", AdminJson.Default.ContainersResponse, ct);
-
-    public async Task<List<RouteMapping>> GetMappingsAsync(CancellationToken ct = default)
-    {
-        var response = await GetAsync("/-/mappings", AdminJson.Default.MappingsResponse, ct).ConfigureAwait(false);
-        return response.Mappings;
-    }
-
-    public Task<MappingResponse> UpsertMappingAsync(string id, RouteMapping mapping, CancellationToken ct = default)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Put, BuildUri($"/-/mappings/{Uri.EscapeDataString(id)}"))
-        {
-            Content = JsonContent.Create(mapping, AdminJson.Default.RouteMapping),
-        };
-        return SendAsync(request, AdminJson.Default.MappingResponse, ct);
-    }
-
-    public Task<MappingResponse> DeleteMappingAsync(string id, CancellationToken ct = default)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Delete, BuildUri($"/-/mappings/{Uri.EscapeDataString(id)}"));
-        return SendAsync(request, AdminJson.Default.MappingResponse, ct);
-    }
-
     private Task<T> GetAsync<T>(string path, JsonTypeInfo<T> typeInfo, CancellationToken ct) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Get, BuildUri(path)), typeInfo, ct);
+
+    /// <summary>
+    /// Validate/save answer HTTP 400 (with a <see cref="ConfigActionResponse"/> body) when the
+    /// YAML is rejected; surface that as a normal <c>Success == false</c> result.
+    /// </summary>
+    private async Task<ConfigActionResponse> SendActionAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        try
+        {
+            return await SendAsync(request, AdminJson.Default.ConfigActionResponse, ct).ConfigureAwait(false);
+        }
+        catch (GatewayApiException ex) when (ex.StatusCode == (int)HttpStatusCode.BadRequest)
+        {
+            return new ConfigActionResponse(false, ex.Message);
+        }
+    }
 
     private Uri BuildUri(string path) => new(settings.BaseUrl + path);
 

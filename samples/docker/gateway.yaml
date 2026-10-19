@@ -1,8 +1,8 @@
 # Container-oriented Slickgate config.
 #
 # Listens on 80/443 inside the container (map with -p 8080:80 -p 8443:443).
-# Docker service discovery is enabled so containers on the shared network can
-# register themselves with `slickgate.*` labels.
+# Routes live in this file only; edits apply via the admin API
+# (POST /-/reload or the admin UI's Save & Apply).
 
 server:
   http_port: 80
@@ -24,13 +24,6 @@ acme:
   directory_url: https://acme-staging-v02.api.letsencrypt.org/directory
   storage_dir: /data/certs
 
-docker:
-  enabled: true
-  endpoint: unix:///var/run/docker.sock
-  network: slickgate
-  label_prefix: slickgate
-  poll_interval: 10s
-
 routes:
   - id: app
     host: app.localhost
@@ -38,3 +31,12 @@ routes:
     upstreams:
       - http://app:80
     tls: internal
+
+  - id: whoami
+    host: whoami.localhost
+    path_prefix: /
+    upstreams:
+      - http://whoami:80
+    tls: internal
+    health_check:
+      path: /

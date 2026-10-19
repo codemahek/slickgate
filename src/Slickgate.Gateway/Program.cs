@@ -7,7 +7,6 @@ using Slickgate.Gateway;
 using Slickgate.Gateway.Admin;
 using Slickgate.Gateway.Certificates;
 using Slickgate.Gateway.Config;
-using Slickgate.Gateway.Discovery;
 using Slickgate.Gateway.Http;
 using Yarp.ReverseProxy.Configuration;
 
@@ -51,11 +50,8 @@ builder.Services.AddSingleton(runtime);
 builder.Services.AddSingleton<IProxyConfigProvider>(proxyProvider);
 builder.Services.AddSingleton(certificates);
 builder.Services.AddSingleton<AcmeChallengeStore>();
-builder.Services.AddSingleton<MappingsStore>();
 builder.Services.AddSingleton<ConfigReloader>();
-builder.Services.AddHostedService<ConfigFileWatcherService>();
 builder.Services.AddHostedService<AcmeProvisioner>();
-builder.Services.AddHostedService<DockerDiscoveryService>();
 builder.Services.AddReverseProxy();
 
 var otlpEndpoint = initialConfig.Telemetry.OtlpEndpoint;
@@ -99,8 +95,17 @@ certificates.UpdateRoutes(initialConfig);
 
 var app = builder.Build();
 
-// Apply the admin-managed mappings overlay (if any) before serving.
-app.Services.GetRequiredService<MappingsStore>().TryLoad(out _);
+// The mappings overlay was removed; warn loudly if a legacy file still exists.
+var legacyMappings = Path.Combine(
+    Path.GetDirectoryName(Path.GetFullPath(hostOptions.ConfigPath)) ?? ".",
+    "gateway.mappings.yaml");
+if (File.Exists(legacyMappings))
+{
+    app.Logger.LogWarning(
+        "Legacy mappings overlay {Path} found but no longer supported; " +
+        "its routes are NOT loaded. Merge them into the gateway config file and delete it.",
+        legacyMappings);
+}
 
 app.UseMiddleware<AcmeChallengeMiddleware>();
 app.UseMiddleware<AdminCorsMiddleware>();
@@ -123,7 +128,6 @@ return 0;
 static GatewayHostOptions ResolveHostOptions(string[] args)
 {
     string? path = null;
-    string? mappings = null;
 
     for (var i = 0; i < args.Length; i++)
     {
@@ -135,18 +139,9 @@ static GatewayHostOptions ResolveHostOptions(string[] args)
         {
             path = args[i]["--config=".Length..];
         }
-        else if (args[i] == "--mappings" && i + 1 < args.Length)
-        {
-            mappings = args[i + 1];
-        }
-        else if (args[i].StartsWith("--mappings=", StringComparison.Ordinal))
-        {
-            mappings = args[i]["--mappings=".Length..];
-        }
     }
 
     path ??= Environment.GetEnvironmentVariable("SLICKGATE_CONFIG");
-    mappings ??= Environment.GetEnvironmentVariable("SLICKGATE_MAPPINGS");
 
     if (string.IsNullOrWhiteSpace(path))
     {
@@ -169,9 +164,5 @@ static GatewayHostOptions ResolveHostOptions(string[] args)
             "or place gateway.yaml in the working directory.");
     }
 
-    mappings ??= Path.Combine(
-        Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".",
-        "gateway.mappings.yaml");
-
-    return new GatewayHostOptions { ConfigPath = path, MappingsPath = mappings };
+    return new GatewayHostOptions { ConfigPath = path };
 }

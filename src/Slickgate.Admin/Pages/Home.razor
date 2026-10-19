@@ -19,7 +19,7 @@
 }
 
 <MudGrid Class="mb-4">
-    <MudItem xs="12" sm="6" md="3">
+    <MudItem xs="12" sm="6" md="4">
         <MudCard>
             <MudCardContent>
                 <MudText Typo="Typo.overline">Status</MudText>
@@ -31,7 +31,7 @@
             </MudCardContent>
         </MudCard>
     </MudItem>
-    <MudItem xs="12" sm="6" md="3">
+    <MudItem xs="12" sm="6" md="4">
         <MudCard>
             <MudCardContent>
                 <MudText Typo="Typo.overline">Effective routes</MudText>
@@ -43,7 +43,7 @@
             </MudCardContent>
         </MudCard>
     </MudItem>
-    <MudItem xs="12" sm="6" md="3">
+    <MudItem xs="12" sm="6" md="4">
         <MudCard>
             <MudCardContent>
                 <MudText Typo="Typo.overline">Uptime</MudText>
@@ -51,18 +51,6 @@
                     <MudText Typo="Typo.h5">@FormatUptime(ViewModel!.Health?.UptimeSeconds)</MudText>
                     <MudSpacer />
                     <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Secondary" />
-                </div>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="3">
-        <MudCard>
-            <MudCardContent>
-                <MudText Typo="Typo.overline">Docker</MudText>
-                <div Class="d-flex align-center">
-                    <MudText Typo="Typo.h5">@(ViewModel!.Config is null ? "—" : (ViewModel!.Config.Docker.Enabled ? "On" : "Off"))</MudText>
-                    <MudSpacer />
-                    <MudIcon Icon="@Icons.Material.Filled.Dns" Color="@(ViewModel!.Config?.Docker.Enabled == true ? Color.Success : Color.Default)" />
                 </div>
             </MudCardContent>
         </MudCard>
@@ -100,7 +88,6 @@
                     <tr><td class="mud-text-secondary">Listen</td><td>http :@ViewModel!.Config.Server.HttpPort · https :@ViewModel!.Config.Server.HttpsPort</td></tr>
                     <tr><td class="mud-text-secondary">Redirect HTTP→HTTPS</td><td>@(ViewModel!.Config.Server.RedirectHttpToHttps ? "on" : "off")</td></tr>
                     <tr><td class="mud-text-secondary">ACME</td><td>@(ViewModel!.Config.Acme.Enabled ? $"enabled ({ViewModel!.Config.Acme.Email})" : "disabled")</td></tr>
-                    <tr><td class="mud-text-secondary">Docker network</td><td>@ViewModel!.Config.Docker.Network · label <code>@ViewModel!.Config.Docker.LabelPrefix.*</code></td></tr>
                 </tbody>
             </MudSimpleTable>
         }

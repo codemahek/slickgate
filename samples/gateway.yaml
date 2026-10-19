@@ -1,5 +1,5 @@
 # Slickgate gateway configuration.
-# This file is hot-reloaded on change: no restart needed.
+# Apply edits explicitly from the admin API (POST /-/reload) or the admin UI.
 
 server:
   http_port: 8080
@@ -17,14 +17,6 @@ acme:
   # Use the staging directory while testing to avoid Let's Encrypt rate limits.
   directory_url: https://acme-staging-v02.api.letsencrypt.org/directory
   storage_dir: ./certs
-
-docker:
-  enabled: false
-  endpoint: unix:///var/run/docker.sock
-  # Destination containers must be on this network (Docker DNS name used as fallback).
-  network: slickgate
-  label_prefix: slickgate
-  poll_interval: 10s
 
 telemetry:
   # otlp_endpoint: http://localhost:4317

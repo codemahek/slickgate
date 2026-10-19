@@ -4,7 +4,7 @@
 #
 # Then browse:
 #   http://app.localhost:8080     -> static route from /etc/slickgate/gateway.yaml
-#   http://whoami.localhost:8080  -> route discovered from Docker labels
+#   http://whoami.localhost:8080  -> static route from /etc/slickgate/gateway.yaml
 #   http://localhost:8081         -> standalone admin UI (Blazor WebAssembly)
 #
 # (add app.localhost / whoami.localhost to your hosts file, or use
@@ -21,8 +21,6 @@ services:
       - "8080:80"
       - "8443:443"
     volumes:
-      # Read-only socket access is all Slickgate needs for discovery.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - slickgate-data:/data
     networks:
       - slickgate
@@ -50,17 +48,11 @@ services:
       - slickgate
     restart: unless-stopped
 
-  # Auto-discovered purely through labels; no gateway config needed.
+  # Second statically configured upstream (referenced by the bundled gateway.yaml).
   whoami:
     image: traefik/whoami:latest
     networks:
       - slickgate
-    labels:
-      slickgate.enable: "true"
-      slickgate.host: whoami.localhost
-      slickgate.port: "80"
-      slickgate.tls: internal
-      slickgate.health_path: /
     restart: unless-stopped
 
 networks:

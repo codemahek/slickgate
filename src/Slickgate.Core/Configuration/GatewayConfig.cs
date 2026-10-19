@@ -24,7 +24,6 @@ public sealed record GatewayConfig
     public ServerConfig Server { get; init; } = new();
     public AdminConfig Admin { get; init; } = new();
     public AcmeConfig Acme { get; init; } = new();
-    public DockerConfig Docker { get; init; } = new();
     public TelemetryConfig Telemetry { get; init; } = new();
 
     /// <summary>Default certificate material for <c>tls: file</c> routes.</summary>
@@ -58,15 +57,6 @@ public sealed record AcmeConfig
     public string Email { get; init; } = "";
     public string DirectoryUrl { get; init; } = "https://acme-v02.api.letsencrypt.org/directory";
     public string StorageDir { get; init; } = "./certs";
-}
-
-public sealed record DockerConfig
-{
-    public bool Enabled { get; init; }
-    public string Endpoint { get; init; } = "unix:///var/run/docker.sock";
-    public string Network { get; init; } = "slickgate";
-    public string LabelPrefix { get; init; } = "slickgate";
-    public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(10);
 }
 
 public sealed record TelemetryConfig

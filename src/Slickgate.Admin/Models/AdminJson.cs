@@ -12,8 +12,7 @@ namespace Slickgate.Admin.Models;
 [JsonSerializable(typeof(ReloadResponse))]
 [JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(ConfigResponse))]
-[JsonSerializable(typeof(ContainersResponse))]
-[JsonSerializable(typeof(MappingsResponse))]
-[JsonSerializable(typeof(MappingResponse))]
-[JsonSerializable(typeof(RouteMapping))]
+[JsonSerializable(typeof(RawConfigResponse))]
+[JsonSerializable(typeof(RawConfigRequest))]
+[JsonSerializable(typeof(ConfigActionResponse))]
 public sealed partial class AdminJson : JsonSerializerContext;

@@ -27,8 +27,7 @@ builder.Services.AddScoped<GatewayAdminClient>();
 // handed back already-disposed on the second visit to a page.
 builder.Services.AddTransient<DashboardViewModel>();
 builder.Services.AddTransient<RoutesViewModel>();
-builder.Services.AddTransient<MappingsViewModel>();
-builder.Services.AddTransient<ContainersViewModel>();
+builder.Services.AddTransient<ConfigViewModel>();
 builder.Services.AddTransient<SettingsViewModel>();
 
 RxAppBuilder.CreateReactiveUIBuilder()

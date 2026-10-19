@@ -21,7 +21,6 @@
     </ToolBarContent>
     <HeaderContent>
         <MudTh>Id</MudTh>
-        <MudTh>Source</MudTh>
         <MudTh>Hosts</MudTh>
         <MudTh>Path</MudTh>
         <MudTh>Upstreams</MudTh>
@@ -29,9 +28,6 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Id"><code>@context.Id</code></MudTd>
-        <MudTd DataLabel="Source">
-            <MudChip T="string" Size="Size.Small" Color="@SourceColor(context.Source)">@context.Source</MudChip>
-        </MudTd>
         <MudTd DataLabel="Hosts">
             @foreach (var host in context.Hosts)
             {
@@ -66,14 +62,6 @@
 
 @code {
     private void OnSearchChanged() => StateHasChanged();
-
-    private static Color SourceColor(string source) => source switch
-    {
-        "file" => Color.Primary,
-        "mappings" => Color.Secondary,
-        "docker" => Color.Tertiary,
-        _ => Color.Default,
-    };
 
     protected override RoutesViewModel CreateViewModel(IServiceProvider serviceProvider) =>
         serviceProvider.GetRequiredService<RoutesViewModel>();

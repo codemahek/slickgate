@@ -1,0 +1,85 @@
+@page "/config"
+@inherits ReactiveComponentBase<ConfigViewModel>
+@inject ISnackbar Snackbar
+
+<PageTitle>Slickgate · Config</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-1">Config</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    @if (ViewModel!.ConfigPath is not null)
+    {
+        <span>Edit <code>@ViewModel!.ConfigPath</code> directly. Save writes the file; Apply reloads it without downtime.</span>
+    }
+    else
+    {
+        <span>Loading configuration…</span>
+    }
+</MudText>
+
+@if (ViewModel!.ErrorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4" Variant="Variant.Outlined">@ViewModel!.ErrorMessage</MudAlert>
+}
+
+@if (ViewModel!.StatusMessage is not null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-4" Variant="Variant.Outlined">@ViewModel!.StatusMessage</MudAlert>
+}
+
+<MudPaper Class="pa-2 mb-4" Outlined="true">
+    <MudTextField T="string"
+                  @bind-Value="ViewModel!.Yaml"
+                  Lines="30"
+                  Variant="Variant.Outlined"
+                  FullWidth="true"
+                  Disabled="@ViewModel!.IsLoading"
+                  Style="font-family: monospace; font-size: 13px;"
+                  Immediate="true" />
+</MudPaper>
+
+<MudStack Row="true" Spacing="2" Class="mb-4">
+    <MudButton StartIcon="@Icons.Material.Filled.Refresh"
+               Variant="Variant.Outlined"
+               Disabled="@(ViewModel!.IsLoading || ViewModel!.IsBusy)"
+               OnClick="@(() => ViewModel!.LoadAsync())">Reload from disk</MudButton>
+    <MudButton StartIcon="@Icons.Material.Filled.Rule"
+               Variant="Variant.Outlined"
+               Disabled="@(ViewModel!.IsLoading || ViewModel!.IsBusy)"
+               OnClick="ValidateAsync">Validate</MudButton>
+    <MudButton StartIcon="@Icons.Material.Filled.Save"
+               Variant="Variant.Filled"
+               Color="Color.Primary"
+               Disabled="@(ViewModel!.IsLoading || ViewModel!.IsBusy)"
+               OnClick="SaveAsync">Save</MudButton>
+    <MudButton StartIcon="@Icons.Material.Filled.RestartAlt"
+               Variant="Variant.Filled"
+               Color="Color.Success"
+               Disabled="@(ViewModel!.IsLoading || ViewModel!.IsBusy)"
+               OnClick="SaveAndApplyAsync">Save &amp; Apply</MudButton>
+</MudStack>
+
+@code {
+    private async Task ValidateAsync()
+    {
+        var error = await ViewModel!.ValidateAsync();
+        Snackbar.Add(error ?? "Configuration is valid.", error is null ? Severity.Success : Severity.Error);
+    }
+
+    private async Task SaveAsync()
+    {
+        var error = await ViewModel!.SaveAsync();
+        if (error is not null)
+        {
+            Snackbar.Add(error, Severity.Error);
+        }
+    }
+
+    private async Task SaveAndApplyAsync()
+    {
+        var error = await ViewModel!.SaveAndApplyAsync();
+        Snackbar.Add(error ?? "Configuration saved and applied.", error is null ? Severity.Success : Severity.Error);
+    }
+
+    protected override ConfigViewModel CreateViewModel(IServiceProvider serviceProvider) =>
+        serviceProvider.GetRequiredService<ConfigViewModel>();
+}

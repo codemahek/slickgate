@@ -16,20 +16,20 @@ Internet ──▶ Slickgate ──┬─▶ api     (api.example.com/api/*)
 
 ## Features
 
-- **YAML configuration** with **hot reload** — edit the file, routes update in
-  place; a broken edit never takes the running gateway down.
+- **YAML configuration** — a single `gateway.yaml` is the only source of truth.
+  The admin API validates and writes the file; applying changes is an explicit
+  reload (`POST /-/reload` / **Save & Apply**), like `caddy reload` — no file
+  watcher, and a broken edit never takes the running gateway down.
 - **Automatic HTTPS** via ACME (Let's Encrypt et al., HTTP-01), plus a built-in
   `internal` mode that mints self-signed certs per host for local development.
-- **Docker service discovery** — containers opt in with a handful of labels and
-  Slickgate builds routes for them automatically.
 - **Path routing & rewriting** — `path_prefix` / `path_exact` matching,
   `strip_prefix`, and request/response header transforms.
 - **Health checks** — active probing per cluster with automatic failover.
-- **Admin API** — inspect effective routes/config and trigger reloads at
-  `/-/…` (optionally token-protected).
+- **Admin API** — inspect effective routes/config, edit and validate the config
+  file, and trigger reloads at `/-/…` (optionally token-protected).
 - **Admin UI** — a standalone Blazor WebAssembly dashboard (its own container)
-  for routes, mappings, Docker containers, and settings, talking to the gateway
-  purely over the admin API.
+  for the dashboard, routes, a YAML config editor, and settings, talking to the
+  gateway purely over the admin API.
 - **Observability** — OpenTelemetry (OTLP) traces/metrics when configured.
 - **Native AOT** — `-p:SlickgateAot=true` produces a self-contained native
   binary for fast cold starts and a tiny footprint.
@@ -59,8 +59,8 @@ curl http://localhost:8080/-/routes          # effective routes
 docker compose up --build
 ```
 
-Then browse `http://app.localhost:8080` (static route) and
-`http://whoami.localhost:8080` (route discovered from labels). On
+Then browse `http://app.localhost:8080` and `http://whoami.localhost:8080`
+(both static routes from the bundled config). On
 Windows/macOS `*.localhost` resolves to the loopback address automatically.
 
 The standalone admin UI is served at `http://localhost:8081` and connects to the
@@ -85,13 +85,6 @@ acme:
   email: admin@example.com
   directory_url: https://acme-v02.api.letsencrypt.org/directory
   storage_dir: ./certs
-
-docker:
-  enabled: true
-  endpoint: unix:///var/run/docker.sock
-  network: slickgate
-  label_prefix: slickgate
-  poll_interval: 10s
 
 tls:                          # used by routes with `tls: file`
   cert_file: ./certs/origin.pem
@@ -144,16 +137,12 @@ routes:
 | `server`  | `http_port`            | `80`                    | HTTP listener                                    |
 |           | `https_port`           | `443`                   | HTTPS listener                                   |
 |           | `redirect_http_to_https` | `true`                | 308 redirect (skips `/-/` and ACME challenges)   |
-| `admin`   | `enabled`              | `true`                  | Mounts the `/-/` endpoints                       |
+| `admin`   | `enabled`              | `true`                  | Mounts the `/-/` endpoints (`/-/health` is always available) |
 |           | `token`                | –                       | Sent as `X-Slickgate-Token`                      |
 | `acme`    | `enabled`              | `false`                 | Enable Let's Encrypt issuance                    |
 |           | `email`                | –                       | Required when `enabled`                          |
 |           | `directory_url`        | LE production           | Use the staging URL while testing                |
 |           | `storage_dir`          | `./certs`               | Certificates + account key                       |
-| `docker`  | `enabled`              | `false`                 | Poll the Docker Engine API                       |
-|           | `endpoint`             | `unix:///var/run/docker.sock` | Also `npipe://` and `tcp://`               |
-|           | `network`              | `slickgate`             | Network to resolve container IPs on              |
-|           | `poll_interval`        | `10s`                   | Durations accept `d/h/m/s/ms`                    |
 | `tls`     | `cert_file` / `key_file` | –                     | BYO PEM cert/key used by routes with `tls: file` |
 | `route`   | `id`                   | –                       | Required, unique                                 |
 |           | `host` / `hosts`       | –                       | At least one of host or `path_*` required        |
@@ -168,38 +157,23 @@ routes:
 |           | `health_check`         | –                       | `path`, `interval`, `timeout`                    |
 |           | `order`                | declaration order × 10  | Lower runs first                                 |
 
-### Docker labels
-
-Every label is prefixed (default `slickgate`, configurable via
-`docker.label_prefix`):
-
-| Label                     | Example             | Meaning                                   |
-| ------------------------- | ------------------- | ----------------------------------------- |
-| `slickgate.enable`        | `true`              | Required — opt the container in           |
-| `slickgate.host`/`.hosts` | `app.example.com`   | Hostname(s); defaults to container name   |
-| `slickgate.port`          | `3000`              | Container port to proxy to (default `80`) |
-| `slickgate.id`            | `app`               | Route id (defaults to a slug of the name) |
-| `slickgate.path`          | `/api`              | Path prefix (default `/`)                 |
-| `slickgate.tls`           | `internal`          | `off` \| `internal` \| `auto` \| `file`   |
-| `slickgate.strip_prefix`  | `true` or `/api`    | Strip the path prefix                     |
-| `slickgate.health_path`   | `/healthz`          | Active health-check endpoint              |
-| `slickgate.order`         | `5`                 | Route priority                            |
-
 ## Admin API
 
-| Method | Path                   | Description                        |
-| ------ | ---------------------- | ---------------------------------- |
-| GET    | `/-/health`            | Liveness/health (always open)      |
-| GET    | `/-/routes`            | Effective routes (file + Docker)   |
-| GET    | `/-/config`            | Effective configuration            |
-| POST   | `/-/reload`            | Re-read the config file from disk  |
-| GET    | `/-/docker/containers` | Discoverable Docker containers     |
-| GET    | `/-/mappings`          | List admin mappings (overlay)      |
-| PUT    | `/-/mappings/{id}`     | Create or replace a mapping        |
-| DELETE | `/-/mappings/{id}`     | Delete a mapping                   |
+| Method | Path                   | Description                             |
+| ------ | ---------------------- | --------------------------------------- |
+| GET    | `/-/health`            | Liveness/health (always open)           |
+| GET    | `/-/routes`            | Effective routes                        |
+| GET    | `/-/config`            | Effective configuration                 |
+| GET    | `/-/config/raw`        | The raw config file (YAML text)         |
+| POST   | `/-/config/validate`   | Validate YAML without writing           |
+| PUT    | `/-/config/raw`        | Validate + write the config file        |
+| POST   | `/-/reload`            | Apply the saved config file (no downtime) |
 
 When `admin.token` is set, all endpoints except `/-/health` require the
-`X-Slickgate-Token` header.
+`X-Slickgate-Token` header. `GET /-/config` never echoes the token back (it
+reports `***` when one is configured); `GET /-/config/raw` returns the file
+verbatim, so it does contain any secrets in it. Nothing watches the file —
+changes take effect only when `/-/reload` is called (or the process restarts).
 
 ## Admin UI
 
@@ -219,10 +193,9 @@ Point it at a gateway from the **Settings** page (base URL + optional token);
 the connection is kept in the browser. If the UI is served from a different
 origin, add it to `admin.cors_origins` in the gateway config.
 
-Pages: **dashboard** (health + live route/backend counts), **routes**,
-**mappings** (CRUD against the overlay), **Docker containers** (import a
-discovered container as a mapping), and **settings** (edit + test the gateway
-connection).
+Pages: **dashboard** (health + reload), **routes** (effective route table),
+**config** (edit, validate, save, and apply `gateway.yaml` from the browser),
+and **settings** (edit + test the gateway connection).
 
 ## Native AOT
 
@@ -245,10 +218,9 @@ incomplete.
 
 ```
 src/
-  Slickgate.Core/        configuration model, YAML loader, YARP mapping,
-                         Docker label parsing + Engine API client
-  Slickgate.Gateway/     host bootstrap, certificates/ACME, discovery and
-                         reload services, admin API, middleware
+  Slickgate.Core/        configuration model, YAML loader, YARP mapping
+  Slickgate.Gateway/     host bootstrap, certificates/ACME, reload,
+                         admin API, middleware
 tests/
   Slickgate.Core.Tests/  xUnit tests
 samples/                 example configs
@@ -284,8 +256,8 @@ sweep, the caveats, and how to reproduce the run on a native Linux host.
 | Language | Go | C# / .NET |
 | Config | Caddyfile / JSON | YAML |
 | Automatic HTTPS | ✅ | ✅ (ACME HTTP-01) |
-| Docker discovery | via plugin | built in (labels) |
-| Hot reload | ✅ | ✅ |
+| Docker discovery | via plugin | no — explicit YAML only |
+| Hot reload | ✅ | ✅ (explicit Apply, like `caddy reload`) |
 | Runtime | single static binary | managed or **Native AOT** binary |
 | Measured performance | see [`bench/`](bench/README.md) | see [`bench/`](bench/README.md) |
 | Ecosystem | mature | early MVP |
@@ -302,7 +274,7 @@ sweep, the caveats, and how to reproduce the run on a native Linux host.
 ## Status
 
 Early MVP, built as a focused ~1.5–2 week project (AI-assisted). The public
-surface (`GatewayConfig`, the admin API, and label names) is still subject to
+surface (`GatewayConfig` and the admin API) is still subject to
 change.
 
 ## License

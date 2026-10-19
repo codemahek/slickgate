@@ -12,7 +12,6 @@ public sealed record HealthResponse(
 
 public sealed record RouteView(
     string Id,
-    string Source,
     IReadOnlyList<string> Hosts,
     string? PathPrefix,
     string? PathExact,
@@ -30,52 +29,15 @@ public sealed record ConfigResponse(
     ServerConfig Server,
     AdminConfig Admin,
     AcmeConfig Acme,
-    DockerConfig Docker,
     TelemetryConfig Telemetry);
 
+public sealed record RawConfigResponse(string Path, string Yaml);
+
+public sealed record RawConfigRequest(string Yaml);
+
+public sealed record ConfigActionResponse(bool Success, string? Error);
+
 public sealed record ErrorResponse(string Error);
-
-// ---- Docker containers --------------------------------------------------
-
-public sealed record DockerPortView(int PrivatePort, int? PublicPort, string Type);
-
-public sealed record ContainerView(
-    string Id,
-    string Name,
-    string Image,
-    string State,
-    List<DockerPortView> Ports,
-    bool Enabled,
-    string? RouteId,
-    Dictionary<string, string> Labels,
-    RouteMapping Suggested);
-
-public sealed record ContainersResponse(
-    bool DockerEnabled,
-    string? Error,
-    int Count,
-    List<ContainerView> Containers);
-
-// ---- Admin-managed mappings --------------------------------------------
-
-public sealed record HealthCheckMapping(string? Path, string? Interval, string? Timeout);
-
-public sealed record RouteMapping(
-    string? Id,
-    List<string>? Hosts,
-    string? PathPrefix,
-    string? PathExact,
-    List<string>? Upstreams,
-    string? StripPrefix,
-    string? Tls,
-    Dictionary<string, string>? RequestHeadersSet,
-    Dictionary<string, string>? ResponseHeadersSet,
-    HealthCheckMapping? HealthCheck,
-    int? Order);
-
-public sealed record MappingsResponse(int Count, List<RouteMapping> Mappings);
-
-public sealed record MappingResponse(bool Success, string? Error, RouteMapping? Mapping);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -87,9 +49,8 @@ public sealed record MappingResponse(bool Success, string? Error, RouteMapping? 
 [JsonSerializable(typeof(RoutesResponse))]
 [JsonSerializable(typeof(ReloadResponse))]
 [JsonSerializable(typeof(ConfigResponse))]
+[JsonSerializable(typeof(RawConfigResponse))]
+[JsonSerializable(typeof(RawConfigRequest))]
+[JsonSerializable(typeof(ConfigActionResponse))]
 [JsonSerializable(typeof(ErrorResponse))]
-[JsonSerializable(typeof(ContainersResponse))]
-[JsonSerializable(typeof(MappingsResponse))]
-[JsonSerializable(typeof(MappingResponse))]
-[JsonSerializable(typeof(RouteMapping))]
 internal sealed partial class AdminJsonContext : JsonSerializerContext;
