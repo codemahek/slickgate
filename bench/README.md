@@ -206,6 +206,37 @@ Concurrency sweep (15 s each; c=200 column is the median of 6 runs above):
   environment). `DOTNET_GCHeapCount=2` and `DOTNET_GCConserveMemory=9` moved
   neither number meaningfully.
 
+## Large uploads (TLS + HTTP/1.1)
+
+The tables above measure small, fast responses. Large request bodies behave
+differently, and this is where the interesting proxy differences are. Using
+`curl --data-binary` of a 100 MiB file against a neutral Kestrel origin that
+simply drains the body (all endpoints on the same box, loopback):
+
+| Ingress                 | Slickgate | Caddy 2.11.7 | Origin Kestrel (no proxy) |
+| ----------------------- | --------: | -----------: | ------------------------: |
+| HTTP/1.1 plaintext      | 488-499   | 520-783      | 533-568                   |
+| **HTTPS + HTTP/1.1**    | **254-274** | 506-569    | 526-619                   |
+| HTTPS + HTTP/2          | 306-333   | 294-323      | 271-302                   |
+
+(MB/s, 100 MiB upload.) Kestrel alone is fine over TLS; adding Slickgate's proxy
+hop halves it, while Caddy does not. The gap is **specific to HTTPS + HTTP/1.1** —
+plaintext and HTTP/2 are at parity. `bench/yarp-tls-repro/` reproduces it with
+YARP alone (no Slickgate), e.g. 562-638 MB/s read directly vs **107-209 MB/s**
+proxied in the same process.
+
+Two Slickgate-specific *timeout* behaviours on long/slow uploads (both fixed):
+
+- **Kestrel `MinRequestBodyDataRate`** (240 B/s over a 5 s grace) dropped clients
+  that trickle their body — a 1 KiB/6 s upload died at ~13 s. Caddy has no such
+  limit. Fixed in `Program.cs` (`kestrel.Limits.MinRequestBodyDataRate = null`).
+- **YARP `ActivityTimeout`** (100 s default) aborted any request idle ≥100 s
+  mid-body — a 100 MiB upload with a 120 s stall returned `408` at 100.4 s.
+  Slickgate now disables it by default and exposes `server.request_timeout` /
+  per-route `timeout` (see README) to set one explicitly. Note Caddy also drops
+  very-long-stall uploads (measured: 60 s stall passes, 90 s stall fails), so the
+  fixed Slickgate behaviour is the more permissive of the two.
+
 ## Reproducing on Linux bare metal
 
 The Docker harness works unchanged on a Linux host; only the overhead of the

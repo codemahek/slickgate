@@ -5,6 +5,9 @@ server:
   http_port: 8080
   https_port: 8443          # 0 disables the HTTPS listener
   redirect_http_to_https: true
+  # Idle timeout for proxied requests (a request that stalls between reads/writes
+  # for longer than this is dropped). Omit or set to 0 to disable, matching Caddy.
+  # request_timeout: 5m
 
 admin:
   enabled: true
@@ -45,6 +48,7 @@ routes:
       path: /
       interval: 10s
       timeout: 2s
+    # timeout: 0               # per-route override of server.request_timeout (0 disables)
 
   # Static file server — no upstream. `index.html` is served for directory
   # requests; paths are normalised so `..` cannot escape `static_root`.

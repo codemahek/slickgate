@@ -72,6 +72,11 @@ builder.WebHost.ConfigureKestrel(kestrel =>
     // Match Caddy: no request body size limit (Kestrel defaults to ~28.6 MiB).
     kestrel.Limits.MaxRequestBodySize = null;
 
+    // Match Caddy: don't drop clients that trickle their upload. Kestrel aborts a
+    // request body arriving slower than 240 B/s over a 5s grace period, which kills
+    // large/slow uploads (e.g. phone video uploads) that no other proxy rejects.
+    kestrel.Limits.MinRequestBodyDataRate = null;
+
     if (hostOptions.HttpPort > 0)
     {
         kestrel.ListenAnyIP(hostOptions.HttpPort);

@@ -1,4 +1,5 @@
 using Yarp.ReverseProxy.Configuration;
+using Yarp.ReverseProxy.Forwarder;
 
 namespace Slickgate.Core.Proxy;
 
@@ -28,7 +29,7 @@ public static class YarpConfigMapper
             }
 
             routes.Add(MapRoute(route, i));
-            clusters.Add(MapCluster(route));
+            clusters.Add(MapCluster(route, config.Server.RequestTimeout));
         }
 
         return (routes, clusters);
@@ -117,7 +118,7 @@ public static class YarpConfigMapper
         return prefix.Length > 1 ? prefix.TrimEnd('/') : prefix;
     }
 
-    private static ClusterConfig MapCluster(RouteDefinition route)
+    private static ClusterConfig MapCluster(RouteDefinition route, TimeSpan? defaultTimeout)
     {
         var destinations = new Dictionary<string, DestinationConfig>(StringComparer.Ordinal);
         for (var i = 0; i < route.Upstreams.Count; i++)
@@ -125,10 +126,21 @@ public static class YarpConfigMapper
             destinations[i.ToString()] = new DestinationConfig { Address = route.Upstreams[i] };
         }
 
+        // YARP defaults ActivityTimeout to 100s, which aborts long/slow uploads that
+        // stall mid-body (large videos over mobile links). Slickgate disables it unless
+        // the route or server sets request_timeout, matching Caddy's no-timeout default.
+        var timeout = route.Timeout ?? defaultTimeout;
+
         return new ClusterConfig
         {
             ClusterId = route.Id,
             LoadBalancingPolicy = "RoundRobin",
+            HttpRequest = new ForwarderRequestConfig
+            {
+                ActivityTimeout = timeout is { } value && value > TimeSpan.Zero
+                    ? value
+                    : Timeout.InfiniteTimeSpan,
+            },
             HealthCheck = route.HealthCheck is { } health
                 ? new HealthCheckConfig
                 {

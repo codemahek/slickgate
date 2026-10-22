@@ -75,6 +75,7 @@ server:
   http_port: 80
   https_port: 443
   redirect_http_to_https: true
+  # request_timeout: 5m       # idle timeout for proxied requests; omit or 0 to disable (default)
 
 admin:
   enabled: true
@@ -105,6 +106,7 @@ routes:
       path: /healthz
       interval: 10s
       timeout: 2s
+    # timeout: 0                # override request_timeout for this route (0 disables)
 
   - id: app
     hosts: [app.example.com, www.example.com]
@@ -137,6 +139,7 @@ routes:
 | `server`  | `http_port`            | `80`                    | HTTP listener                                    |
 |           | `https_port`           | `443`                   | HTTPS listener                                   |
 |           | `redirect_http_to_https` | `true`                | 308 redirect (skips `/-/` and ACME challenges)   |
+|           | `request_timeout`      | disabled                | Idle timeout for proxied requests (e.g. `5m`); `0` disables |
 | `admin`   | `enabled`              | `true`                  | Mounts the `/-/` endpoints (`/-/health` is always available) |
 |           | `token`                | –                       | Sent as `X-Slickgate-Token`                      |
 | `acme`    | `enabled`              | `false`                 | Enable Let's Encrypt issuance                    |
@@ -155,6 +158,7 @@ routes:
 |           | `request_headers.set`  | –                       | Map of header → value                            |
 |           | `response_headers.set` | –                       | Map of header → value                            |
 |           | `health_check`         | –                       | `path`, `interval`, `timeout`                    |
+|           | `timeout`              | `server.request_timeout` | Idle timeout override; `0` disables             |
 |           | `order`                | declaration order × 10  | Lower runs first                                 |
 
 ## Admin API

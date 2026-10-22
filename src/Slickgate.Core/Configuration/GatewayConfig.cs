@@ -37,6 +37,13 @@ public sealed record ServerConfig
     public int HttpPort { get; init; } = 80;
     public int HttpsPort { get; init; } = 443;
     public bool RedirectHttpToHttps { get; init; } = true;
+
+    /// <summary>
+    /// Default idle timeout for proxied requests (YARP's activity timeout): how long a
+    /// request may stall between reads/writes before it is dropped. <c>null</c> or
+    /// <c>0</c> disables it (matching Caddy, whose default is no timeout).
+    /// </summary>
+    public TimeSpan? RequestTimeout { get; init; }
 }
 
 public sealed record AdminConfig
@@ -94,6 +101,12 @@ public sealed record RouteDefinition
 
     /// <summary>When set, files are served from this directory instead of proxying to upstreams.</summary>
     public string? StaticRoot { get; init; }
+
+    /// <summary>
+    /// Per-route override for <see cref="ServerConfig.RequestTimeout"/>. <c>0</c> disables
+    /// the idle timeout for this route.
+    /// </summary>
+    public TimeSpan? Timeout { get; init; }
 
     /// <summary>HTTP basic-auth users. When non-empty, requests must authenticate before reaching the upstream.</summary>
     public IReadOnlyList<BasicAuthUser> BasicAuth { get; init; } = [];

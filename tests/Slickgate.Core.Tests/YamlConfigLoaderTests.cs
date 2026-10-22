@@ -137,6 +137,59 @@ public class YamlConfigLoaderTests
     }
 
     [Fact]
+    public void Load_ParsesRequestTimeouts()
+    {
+        var config = YamlConfigLoader.Load("""
+            server:
+              request_timeout: 5m
+            routes:
+              - id: slow
+                path_prefix: /
+                upstreams: [http://127.0.0.1:1]
+                timeout: 45s
+              - id: inherits
+                path_prefix: /other
+                upstreams: [http://127.0.0.1:1]
+            """);
+
+        Assert.Equal(TimeSpan.FromMinutes(5), config.Server.RequestTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), config.Routes[0].Timeout);
+        Assert.Null(config.Routes[1].Timeout);
+    }
+
+    [Fact]
+    public void Load_ZeroTimeout_IsDisabled()
+    {
+        var config = YamlConfigLoader.Load("""
+            server:
+              request_timeout: 0
+            routes:
+              - id: r
+                path_prefix: /
+                upstreams: [http://127.0.0.1:1]
+                timeout: 0s
+            """);
+
+        Assert.Null(config.Server.RequestTimeout);
+        Assert.Null(config.Routes[0].Timeout);
+    }
+
+    [Fact]
+    public void Load_RejectsInvalidTimeout()
+    {
+        var ex = Assert.Throws<SlickgateConfigException>(() => YamlConfigLoader.Load("""
+            server:
+              request_timeout: soon
+            routes:
+              - id: r
+                path_prefix: /
+                upstreams: [http://127.0.0.1:1]
+            """));
+
+        Assert.Contains("request_timeout", ex.Message);
+    }
+
+    [Fact]
     public void Load_RejectsDuplicateRouteIds()
     {
         var yaml = """

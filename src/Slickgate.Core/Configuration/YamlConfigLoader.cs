@@ -128,6 +128,7 @@ public static class YamlConfigLoader
             HttpPort = Int(map, "http_port", 80),
             HttpsPort = Int(map, "https_port", 443),
             RedirectHttpToHttps = Bool(map, "redirect_http_to_https", true),
+            RequestTimeout = OptionalDuration(map, "request_timeout"),
         };
 
     private static AdminConfig ParseAdmin(YamlMappingNode? map) => map is null
@@ -207,6 +208,7 @@ public static class YamlConfigLoader
             CertFile = String(map, "cert_file"),
             KeyFile = String(map, "key_file"),
             StaticRoot = String(map, "static_root"),
+            Timeout = OptionalDuration(map, "timeout"),
             BasicAuth = ParseBasicAuth(Seq(map, "basic_auth")),
             RequestHeadersSet = HeaderMap(requestHeaders, "set"),
             RequestHeadersAppend = HeaderMap(requestHeaders, "append"),
@@ -490,5 +492,30 @@ public static class YamlConfigLoader
         {
             throw new SlickgateConfigException($"'{name}': {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Parses an optional duration where <c>0</c> (or any non-positive value) means
+    /// "disabled". Returns null when the key is absent or disabled.
+    /// </summary>
+    private static TimeSpan? OptionalDuration(YamlMappingNode parent, string name)
+    {
+        var value = String(parent, name);
+        if (value is null)
+        {
+            return null;
+        }
+
+        TimeSpan duration;
+        try
+        {
+            duration = ParseDuration(value);
+        }
+        catch (SlickgateConfigException ex)
+        {
+            throw new SlickgateConfigException($"'{name}': {ex.Message}");
+        }
+
+        return duration > TimeSpan.Zero ? duration : null;
     }
 }

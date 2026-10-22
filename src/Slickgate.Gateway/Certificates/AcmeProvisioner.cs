@@ -49,9 +49,7 @@ public sealed partial class AcmeProvisioner(
     private async Task SafeProvisionAllAsync(CancellationToken ct)
     {
         if (Interlocked.Exchange(ref _provisioning, 1) == 1)
-        {
             return;
-        }
 
         try
         {
@@ -104,10 +102,7 @@ public sealed partial class AcmeProvisioner(
         var accountKey = LoadOrCreateAccountKey(acme);
         using var gate = new SemaphoreSlim(MaxConcurrentOrders);
         var tasks = new List<Task>(hosts.Count);
-        foreach (var host in hosts)
-        {
-            tasks.Add(ProvisionHostAsync(host, acme, accountKey, gate, ct));
-        }
+        tasks.AddRange(hosts.Select(host => ProvisionHostAsync(host, acme, accountKey, gate, ct)));
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
     }

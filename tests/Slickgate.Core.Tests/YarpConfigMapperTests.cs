@@ -16,7 +16,8 @@ public class YarpConfigMapperTests
         IReadOnlyDictionary<string, string>? requestHeaders = null,
         IReadOnlyDictionary<string, string>? responseHeaders = null,
         HealthCheckDefinition? health = null,
-        int? order = null) => new()
+        int? order = null,
+        TimeSpan? timeout = null) => new()
         {
             Id = id,
             Hosts = hosts ?? [],
@@ -28,12 +29,22 @@ public class YarpConfigMapperTests
             ResponseHeadersSet = responseHeaders ?? new Dictionary<string, string>(),
             HealthCheck = health,
             Order = order,
+            Timeout = timeout,
         };
 
     private static (IReadOnlyList<Yarp.ReverseProxy.Configuration.RouteConfig> Routes,
         IReadOnlyList<Yarp.ReverseProxy.Configuration.ClusterConfig> Clusters)
         Map(params RouteDefinition[] routes) =>
         YarpConfigMapper.Map(new GatewayConfig { Routes = routes });
+
+    private static (IReadOnlyList<Yarp.ReverseProxy.Configuration.RouteConfig> Routes,
+        IReadOnlyList<Yarp.ReverseProxy.Configuration.ClusterConfig> Clusters)
+        Map(TimeSpan? serverTimeout, params RouteDefinition[] routes) =>
+        YarpConfigMapper.Map(new GatewayConfig
+        {
+            Server = new ServerConfig { RequestTimeout = serverTimeout },
+            Routes = routes,
+        });
 
     [Fact]
     public void Map_PrefixPath_BecomesCatchAllTemplate()
@@ -130,6 +141,30 @@ public class YarpConfigMapperTests
         Assert.Equal("/healthz", active.Path);
         Assert.Equal(TimeSpan.FromSeconds(5), active.Interval);
         Assert.Equal(TimeSpan.FromSeconds(1), active.Timeout);
+    }
+
+    [Fact]
+    public void Map_NoTimeout_DisablesYarpActivityTimeout()
+    {
+        var (_, clusters) = Map(Route());
+
+        Assert.Equal<TimeSpan?>(Timeout.InfiniteTimeSpan, clusters[0].HttpRequest!.ActivityTimeout);
+    }
+
+    [Fact]
+    public void Map_ServerRequestTimeout_AppliesToClusters()
+    {
+        var (_, clusters) = Map(TimeSpan.FromMinutes(2), Route());
+
+        Assert.Equal<TimeSpan?>(TimeSpan.FromMinutes(2), clusters[0].HttpRequest!.ActivityTimeout);
+    }
+
+    [Fact]
+    public void Map_RouteTimeout_OverridesServerDefault()
+    {
+        var (_, clusters) = Map(TimeSpan.FromMinutes(2), Route(timeout: TimeSpan.FromSeconds(30)));
+
+        Assert.Equal<TimeSpan?>(TimeSpan.FromSeconds(30), clusters[0].HttpRequest!.ActivityTimeout);
     }
 
     [Fact]
